@@ -35,11 +35,19 @@ TOPICS = [
         "实现 RESP3 协议解析器",
         [
             ("user", "帮我把 RESP3 的解析器补完，先支持 simple string、error、integer、bulk string 和 array。"),
-            ("assistant", "先确认几件事：\n1. inline command（不带 * 前缀）要不要支持？\n2. bulk string 的长度前缀用 i64 还是 usize？"),
+            ("assistant", "先确认两件事：\n1. inline command（不带 `*` 前缀）要不要支持？\n2. bulk string 的长度前缀用 `i64` 还是 `usize`？"),
             ("user", "inline 先不做。长度用 i64，方便表示 -1 的空值语义。"),
+            ("assistant", "明白。我会把 tokenizer 与 decoder 分开：tokenizer 只负责从字节流里切出「一行 / 一个块」，decoder 负责还原成 `RespValue`。这样粘包和半包都能在同一个循环里处理。"),
+            ("tool", "rg -n \"fn read_line\" src/"),
+            ("tool_result", "src/parser/mod.rs:12:pub fn read_line(buf: &mut Vec<u8>) -> Option<Line> {\nsrc/parser/mod.rs:31:pub fn read_bulk(buf: &mut Vec<u8>, len: i64) -> Option<Bytes> {"),
+            ("assistant", "现有实现每次 `read_line` 都新建 `String`，大 value 场景下分配次数太多。改成复用 `Vec<u8>` 缓冲区，只在 decode 阶段才转成 `String`。"),
+            ("user", "可以，顺便把 null bulk（`$-1`）和 null array（`*-1`）也覆盖上。"),
+            ("assistant", "已实现，关键片段：\n\n```rust\n// -1 表示空值，与 Redis 语义一致\nlet len = parse_len(line)?;\nif len < 0 {\n    return Ok(RespValue::NullBulk);\n}\n```\n\n另外补了 3 个测试用例：`null_bulk`、`null_array`、`split_across_packets`。"),
             ("tool", "cargo test parser::resp3 -- --nocapture"),
-            ("tool_result", "running 12 tests\ntest parser::resp3::simple_string ... ok\ntest parser::resp3::bulk_string ... ok\ntest parser::resp3::null_bulk ... ok\n\ntest result: ok. 12 passed"),
-            ("assistant", "解析器已通过 12 个用例。关键点：\n- `read_line` 用 `read_until(b'\\r\\n')` 复用缓冲区，避免逐 token 分配\n- `-1` 长度返回 `None`，与 Redis 的空值语义对齐\n- 剩余字节留在缓冲区里，支持粘包场景"),
+            ("tool_result", "running 15 tests\ntest parser::resp3::simple_string ... ok\ntest parser::resp3::error_frame ... ok\ntest parser::resp3::integer ... ok\ntest parser::resp3::bulk_string ... ok\ntest parser::resp3::null_bulk ... ok\ntest parser::resp3::null_array ... ok\ntest parser::resp3::split_across_packets ... ok\n\ntest result: ok. 15 passed; 0 failed"),
+            ("assistant", "15 个用例全部通过。接下来建议：\n- 给 `RespValue` 补 `Display`，方便日志直接打印\n- 在 decode 层加一个可选的「最大块大小」限制，避免异常长度导致内存暴涨"),
+            ("user", "先加上最大块限制，Display 后面再说。"),
+            ("assistant", "已加：超过 `max_bulk_len`（默认 512MB）直接返回 `Err(RespError::TooLarge)`，且可通过 `ParserConfig` 调整。"),
         ],
     ),
     (
@@ -169,6 +177,9 @@ def codex_session(root, thread, title, project, when, topic):
         elif role == "tool_result":
             push("response_item", {"type": "function_call_output", "id": f"fco-{ordinal}",
                                    "call_id": f"call-{ordinal}", "output": text}, cursor)
+    # 每 5 个 Codex 会话注入未来版本的事件类型（触发 partial 标记）
+    if hash(thread) % 5 == 0:
+        push("event_msg", {"type": "future_telemetry_v3", "detail": {"wire": "v3"}}, cursor)
     push("event_msg", {"type": "task_complete", "turn_id": "turn-1", "duration_ms": 42_000}, cursor)
 
     day = when.strftime("%Y/%m/%d")
@@ -209,6 +220,13 @@ def kimi_session(root, session_id, title, project, when, topic):
             lines.append({"type": "context.append_loop_event", "agentId": "main", "time": iso(cursor),
                           "event": {"type": "tool.result", "parentUuid": uuid.uuid4().hex[:8],
                                     "toolCallId": f"call{len(lines)}", "result": {"content": [{"type": "text", "text": text}]}}})
+    # 每 4 个 Kimi 会话注入一个未知事件，用于展示「部分事件暂未识别」
+    if hash(session_id) % 4 == 0:
+        lines.append({"type": "brand.new.event", "agentId": "main",
+                      "payload": {"feature": "telemetry-v2"}, "time": iso(cursor)})
+    # 每 6 个 Kimi 会话只保留遥测行（0 条可展示消息），用于展示空会话状态
+    if hash(session_id) % 6 == 0:
+        lines = [line for line in lines if line["type"] in ("metadata", "turn.ended")]
     lines.append({"type": "turn.ended", "agentId": "main", "turnId": "t1", "reason": "completed",
                   "durationMs": 38_000, "time": iso(cursor)})
 
@@ -241,7 +259,8 @@ def main():
 
     for i in range(args.sessions):
         project_name, project = PROJECTS[i % len(PROJECTS)]
-        title, topic = TOPICS[i % len(TOPICS)]
+        # 第一个会话用最长的 hero 话题（阅读器排版样本），其余轮转其余话题
+        title, topic = TOPICS[0] if i == 0 else TOPICS[1 + (i - 1) % (len(TOPICS) - 1)]
         # 时间：越靠后的会话越旧，保证列表里按时间倒序自然分组
         when = now - timedelta(days=(i * args.days) // max(args.sessions, 1), hours=random.randint(0, 6),
                                minutes=random.randint(0, 59))

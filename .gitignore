@@ -16,3 +16,6 @@ app-icon.png
 # 调试截图（临时产物）
 .screenshot.png
 .shot-*.png
+
+# UI 截图基线（用 npm run ui:shots 重新生成，不入库）
+.ui-shots/
