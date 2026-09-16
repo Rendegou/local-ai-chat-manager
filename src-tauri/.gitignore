@@ -1,0 +1,2 @@
+# 由 tauri-build 在每次构建时自动生成（权限 schema 等），无需入库
+/gen/schemas
