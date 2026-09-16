@@ -55,6 +55,9 @@ export default function App() {
     filter,
     filtersOpen,
     setFiltersOpen,
+    pendingPage,
+    confirmLeaveSettings,
+    cancelLeaveSettings,
   } = useLibrary()
   const syncStatus = useSync((state) => state.status)
   // 宽窗口下三栏并排，来源栏常驻；窄窗口改为抽屉，由工具栏「筛选」按钮唤出
@@ -120,7 +123,7 @@ export default function App() {
           <SegmentedNav
             items={NAV.map((item) => ({ key: item.key, label: item.label, hint: item.hint }))}
             current={page}
-            onSelect={(key) => setPage(key as PageKey)}
+            onSelect={(key) => useLibrary.getState().requestPage(key as PageKey)}
           />
         </div>
 
@@ -217,6 +220,40 @@ export default function App() {
             }
           >
             窄窗口下来源/项目栏收进抽屉；在会话页左侧抽屉中选择即可。
+          </Notice>
+        </div>
+      ) : null}
+
+      {/* 设置页有未保存草稿时，离开前先确认（规格 §6.4） */}
+      {pendingPage ? (
+        <div className="border-b border-line bg-panel px-3.5 py-2">
+          <Notice
+            tone="warning"
+            title="设置有未保存的修改"
+            actions={
+              <>
+                <Button
+                  size="sm"
+                  tone="primary"
+                  onClick={() => {
+                    void useLibrary.getState().saveSettingsDraft().then((ok) => {
+                      if (ok) confirmLeaveSettings()
+                    })
+                  }}
+                  title="保存当前修改并前往目标页面"
+                >
+                  保存并离开
+                </Button>
+                <Button size="sm" onClick={confirmLeaveSettings}>
+                  放弃修改
+                </Button>
+                <Button size="sm" tone="ghost" onClick={cancelLeaveSettings}>
+                  留在本页
+                </Button>
+              </>
+            }
+          >
+            修改尚未保存，离开后不会生效。
           </Notice>
         </div>
       ) : null}

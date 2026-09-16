@@ -30,6 +30,12 @@ interface LibraryState {
   page: PageKey
   /** 窄窗口下的筛选抽屉是否展开（纯 UI 状态） */
   filtersOpen: boolean
+  /** 设置草稿（null 表示与已保存设置一致） */
+  settingsDraft: AppSettings | null
+  /** 设置页是否有未保存草稿（用于离开前保护） */
+  settingsDirty: boolean
+  /** 因未保存草稿而被拦下的目标页面 */
+  pendingPage: PageKey | null
 
   // ---- 设置与数据源 ----
   settings: AppSettings | null
@@ -57,6 +63,19 @@ interface LibraryState {
   // ---- actions ----
   setPage: (page: PageKey) => void
   setFiltersOpen: (open: boolean) => void
+  /** 修改草稿（会自动更新「未保存」标记） */
+  patchSettingsDraft: (patch: Partial<AppSettings>) => void
+  /** 保存草稿；返回是否成功 */
+  saveSettingsDraft: () => Promise<boolean>
+  /** 放弃草稿，恢复到已保存设置 */
+  resetSettingsDraft: () => void
+  setSettingsDirty: (dirty: boolean) => void
+  /** 导航请求：设置页有未保存草稿时先拦下（规格 §6.4） */
+  requestPage: (page: PageKey) => void
+  /** 确认放弃草稿并跳转 */
+  confirmLeaveSettings: () => void
+  /** 取消跳转 */
+  cancelLeaveSettings: () => void
   setTheme: (theme: 'system' | 'light' | 'dark') => void
   setError: (error: ipc.IpcError | null) => void
   bootstrap: () => Promise<void>
@@ -92,6 +111,9 @@ export const useLibrary = create<LibraryState>((set, get) => ({
   theme: 'system',
   page: 'conversations',
   filtersOpen: false,
+  settingsDraft: null,
+  settingsDirty: false,
+  pendingPage: null,
   settings: null,
   sources: [],
   machines: [],
@@ -110,6 +132,44 @@ export const useLibrary = create<LibraryState>((set, get) => ({
 
   setPage: (page) => set({ page }),
   setFiltersOpen: (filtersOpen) => set({ filtersOpen }),
+  patchSettingsDraft: (patch) => {
+    const current = get().settingsDraft ?? get().settings
+    if (!current) return
+    const next = { ...current, ...patch }
+    // 与已保存设置逐字段比较，决定是否标记「未保存」
+    const saved = get().settings
+    const dirty = saved ? JSON.stringify(next) !== JSON.stringify(saved) : true
+    set({ settingsDraft: next, settingsDirty: dirty })
+  },
+
+  saveSettingsDraft: async () => {
+    const draft = get().settingsDraft
+    if (!draft) return true
+    const ok = await get().updateSettings(draft)
+    if (ok) set({ settingsDraft: null, settingsDirty: false })
+    return ok
+  },
+
+  resetSettingsDraft: () => set({ settingsDraft: null, settingsDirty: false }),
+
+  setSettingsDirty: (settingsDirty) => set({ settingsDirty }),
+
+  requestPage: (page) => {
+    const state = get()
+    // 只在「离开设置页且草稿未保存」时拦截，其余情况直接跳转
+    if (state.page === 'settings' && state.settingsDirty && page !== 'settings') {
+      set({ pendingPage: page })
+      return
+    }
+    set({ page })
+  },
+
+  confirmLeaveSettings: () => {
+    const { pendingPage } = get()
+    set({ settingsDirty: false, pendingPage: null, page: pendingPage ?? get().page })
+  },
+
+  cancelLeaveSettings: () => set({ pendingPage: null }),
   setTheme: (theme) => set({ theme }),
   setError: (error) => set({ error }),
 

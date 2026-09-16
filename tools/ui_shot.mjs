@@ -378,6 +378,43 @@ async function main() {
               })
               await new Promise((r) => setTimeout(r, 600))
             }
+            if (state === 'query') {
+              // 搜索出结果：输入关键词并回车
+              await tab.evaluate(() => {
+                const input = document.querySelector('input[aria-label="搜索关键词"]')
+                if (input) {
+                  const setter = Object.getOwnPropertyDescriptor(
+                    window.HTMLInputElement.prototype, 'value').set
+                  setter.call(input, 'watchdog')
+                  input.dispatchEvent(new Event('input', { bubbles: true }))
+                }
+              })
+              await tab.keyboard.press('Enter')
+              await new Promise((r) => setTimeout(r, 700))
+            }
+            if (state === 'advanced') {
+              // 展开高级筛选
+              await tab.evaluate(() => {
+                const button = [...document.querySelectorAll('button')]
+                  .find((b) => (b.textContent ?? '').includes('高级筛选'))
+                button?.click()
+              })
+              await new Promise((r) => setTimeout(r, 400))
+            }
+            if (state === 'dirty') {
+              // 设置未保存 → 切换到其他页面应被拦下
+              await tab.evaluate(() => {
+                const box = document.querySelector('input[type="checkbox"]')
+                box?.click()
+              })
+              await new Promise((r) => setTimeout(r, 300))
+              await tab.evaluate(() => {
+                const nav = [...document.querySelectorAll('nav button')]
+                  .find((b) => b.textContent?.trim() === '会话')
+                nav?.click()
+              })
+              await new Promise((r) => setTimeout(r, 500))
+            }
             if (state === 'focus') {
               // 键盘焦点状态：连按 Tab，验证焦点环清晰可见（Phase 1 验收项）
               for (let i = 0; i < 6; i += 1) {
