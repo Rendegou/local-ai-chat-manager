@@ -316,6 +316,13 @@ pub fn scan(
                 db.set_sync_status(&session_id, status)?;
                 report.parsed += 1;
                 parsed_this_run += 1;
+                // 周期性 checkpoint：全量重建时 WAL 随写入持续膨胀（数万条消息实测峰值数 GB），
+                // 每解析若干会话就截断一次，把磁盘峰值压到几百 MB 以内
+                if parsed_this_run % 8 == 0 {
+                    if let Err(err) = db.checkpoint() {
+                        tracing::warn!(error = %err, "WAL 周期 checkpoint 失败");
+                    }
+                }
             }
             Err(err) => {
                 report.failed += 1;

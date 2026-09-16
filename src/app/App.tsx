@@ -73,7 +73,13 @@ export default function App() {
     const subscriptions: Array<() => void> = []
     void ipc
       .onScanProgress((progress) => {
-        useLibrary.getState().setScanning(true, { done: progress.done, total: progress.total })
+        // 后端在扫描结束时还会发一次 done=total 的「完成」事件；
+        // 它可能在 scan() 返回之后才送达——若据此把 scanning 置回 true，转圈就永远停不下来。
+        if (progress.done >= progress.total) {
+          useLibrary.getState().setScanning(false)
+        } else {
+          useLibrary.getState().setScanning(true, { done: progress.done, total: progress.total })
+        }
       })
       .then((unlisten) => subscriptions.push(unlisten))
     void ipc
