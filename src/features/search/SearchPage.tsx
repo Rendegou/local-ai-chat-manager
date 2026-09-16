@@ -323,12 +323,12 @@ export function SearchPage() {
               }}
               className="block w-full border-b border-line/60 px-4 py-2.5 text-left transition-colors hover:bg-hover"
             >
-              <div className="flex items-center gap-2 text-meta text-ink-muted">
+              <div className="flex min-w-0 items-center gap-2 text-meta text-ink-muted">
                 <StatusPill tone={hit.source === 'kimi' ? 'kimi' : 'codex'}>
                   {sourceLabel(hit.source)}
                 </StatusPill>
-                <span className="truncate text-ink">{hit.projectPath ?? '未知项目'}</span>
-                <span className="truncate">{hit.title ?? hit.sessionId}</span>
+                <span className="min-w-0 flex-1 truncate text-ink">{hit.projectPath ?? '未知项目'}</span>
+                <span className="min-w-0 flex-1 truncate">{hit.title ?? hit.sessionId}</span>
                 <span className="ml-auto shrink-0">{formatRelative(hit.sessionUpdatedAt)}</span>
               </div>
               {/* snippet 为后端生成的高亮片段（含 <mark>） */}

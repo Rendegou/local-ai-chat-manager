@@ -41,10 +41,10 @@ export function ConversationsPage() {
   const showDetail = listAndDetail || Boolean(selectedId)
 
   return (
-    <div className="flex min-h-0 flex-1 bg-canvas">
+    <div className="flex min-h-0 min-w-0 flex-1 bg-canvas">
       {/* 来源/项目栏：宽窗口常驻，窄窗口变成抽屉 */}
       {threeColumn ? (
-        <aside className="flex w-56 shrink-0 flex-col border-r border-line">
+        <aside className="flex w-[224px] shrink-0 flex-col overflow-hidden border-r border-line">
           <SourceSidebar />
         </aside>
       ) : filtersOpen ? (
@@ -56,7 +56,7 @@ export function ConversationsPage() {
             onClick={() => setFiltersOpen(false)}
             className="absolute inset-0 z-20 bg-canvas/60"
           />
-          <aside className="relative z-30 flex w-60 shrink-0 flex-col border-r border-line bg-panel shadow-overlay">
+          <aside className="relative z-30 flex w-[240px] shrink-0 flex-col overflow-hidden border-r border-line bg-panel shadow-overlay">
             <div className="flex items-center justify-between border-b border-line px-3 py-2">
               <span className="text-lead text-ink">筛选</span>
               <IconButton label="关闭筛选抽屉" size="sm" onClick={() => setFiltersOpen(false)}>
@@ -79,7 +79,7 @@ export function ConversationsPage() {
 
       {/* 会话正文 */}
       {showDetail ? (
-        <section className="flex min-w-0 flex-1 flex-col">
+        <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
           {/* 两级视图下提供「返回列表」 */}
           {!listAndDetail && selectedId ? (
             <div className="flex items-center gap-2 border-b border-line bg-panel px-3 py-1.5">

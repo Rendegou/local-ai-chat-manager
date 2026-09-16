@@ -14,7 +14,9 @@
     "tauri:build": "tauri build",
     "ui:demo": "python tools/make_demo_data.py .ui-shots/demo --sessions 26 --days 10",
     "ui:mock": "python tools/export_ui_mock.py .ui-shots/demo-index .ui-shots/mock/data.json",
-    "ui:shots": "node tools/ui_shot.mjs --out .ui-shots/latest"
+    "ui:shots": "node tools/ui_shot.mjs --out .ui-shots/latest",
+    "ui:qa": "node tools/ui_qa.mjs",
+    "ui:a11y": "node tools/ui_shot.mjs --out .ui-shots/a11y --pages conversations,search,sync,settings --a11y true"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.1.1",

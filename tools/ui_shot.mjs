@@ -62,7 +62,7 @@ function parseArgs(argv) {
  * 1. 必须在页面脚本之前注入（evaluateOnNewDocument）；
  * 2. 处理逻辑必须写在页面里 —— 从 Node 传函数会被 JSON 序列化丢掉（注意 `String.raw`）。
  */
-const PAGE_MOCK = String.raw`
+export const PAGE_MOCK = String.raw`
 (() => {
   const mock = __MOCK__;
   const stateName = __STATE__;
@@ -297,8 +297,8 @@ const CONTRAST_AUDIT = () => {
   return results
 }
 
-/** 生成注入脚本（替换占位符）。 */
-function injectionFor(mock, stateName, theme) {
+/** 生成注入脚本（替换占位符）。ui_qa.mjs 也复用它，保证行为一致。 */
+export function injectionFor(mock, stateName, theme) {
   return PAGE_MOCK
     .replace('__MOCK__', JSON.stringify(mock))
     .replace('__STATE__', JSON.stringify(stateName))
@@ -453,7 +453,12 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error('截图失败：', error)
-  process.exit(1)
-})
+// 直接执行时才跑 CLI；被 import 时（ui_qa.mjs）只导出工具函数
+// 用文件名后缀判断，避免路径分隔符在 Windows/Git Bash 下的差异
+const isDirectRun = /ui_shot[.]mjs$/.test(process.argv[1] || '')
+if (isDirectRun) {
+  main().catch((error) => {
+    console.error('截图失败：', error)
+    process.exit(1)
+  })
+}

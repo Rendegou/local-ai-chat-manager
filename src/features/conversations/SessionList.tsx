@@ -148,12 +148,12 @@ function SessionRow({
         active ? 'bg-selected' : 'hover:bg-hover'
       }`}
     >
-      <div className="flex items-center gap-1.5">
+      <div className="flex min-w-0 items-center gap-1.5">
         <span
           aria-hidden="true"
           className={`h-3.5 w-0.5 shrink-0 rounded-full ${active ? 'bg-accent' : 'bg-transparent'}`}
         />
-        <span className="truncate text-body font-medium text-ink">
+        <span className="min-w-0 flex-1 truncate text-body font-medium text-ink">
           {session.title ?? '无标题'}
         </span>
         {session.partial ? (
@@ -169,11 +169,11 @@ function SessionRow({
           </StatusPill>
         ) : null}
       </div>
-      <div className="flex items-center gap-2 pl-2 text-meta text-ink-muted">
+      <div className="flex min-w-0 items-center gap-2 pl-2 text-meta text-ink-muted">
         <span className={`shrink-0 ${session.source === 'kimi' ? 'text-kimi' : 'text-codex'}`}>
           {sourceLabel(session.source)}
         </span>
-        <span className="truncate">{session.projectPath ?? '未知项目'}</span>
+        <span className="min-w-0 flex-1 truncate">{session.projectPath ?? '未知项目'}</span>
         <span className="ml-auto shrink-0 tabular-nums">
           {session.messageCount} 条 · {formatRelative(session.updatedAt)}
         </span>

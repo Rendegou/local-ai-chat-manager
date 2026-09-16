@@ -92,7 +92,7 @@ export function Menu({
                   : 'text-ink hover:bg-hover'
               }`}
             >
-              <span className="flex-1 truncate">{item.label}</span>
+              <span className="min-w-0 flex-1 truncate">{item.label}</span>
               {item.hint ? <span className="text-meta text-ink-muted">{item.hint}</span> : null}
             </button>
           ))}

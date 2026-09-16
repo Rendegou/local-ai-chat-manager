@@ -34,8 +34,12 @@ export function PanelHeader({
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 flex-1 items-baseline gap-2.5">
-          <h2 className="truncate text-title text-ink">{title}</h2>
-          {meta ? <div className="min-w-0 truncate text-meta text-ink-muted">{meta}</div> : null}
+          {/* truncate 必须配 min-w-0 + flex-1：否则 nowrap 文本的固有宽度会撑宽整个头部
+              （仅在文字放到 200% 时才暴露出来） */}
+          <h2 className="min-w-0 flex-1 truncate text-title text-ink">{title}</h2>
+          {meta ? (
+            <div className="min-w-0 flex-1 truncate text-meta text-ink-muted">{meta}</div>
+          ) : null}
         </div>
         {actions ? <div className="flex shrink-0 items-center gap-1.5">{actions}</div> : null}
       </div>

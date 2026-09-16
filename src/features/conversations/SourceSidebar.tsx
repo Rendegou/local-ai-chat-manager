@@ -25,7 +25,7 @@ export function SourceSidebar() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-panel">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-panel">
       {/* 数据源 */}
       <div className="border-b border-line px-2 py-2">
         <div className="px-1.5 pb-1 text-meta font-semibold uppercase tracking-wide text-ink-muted">
@@ -64,7 +64,7 @@ export function SourceSidebar() {
                 <span aria-hidden="true" className={id === 'kimi' ? 'text-kimi' : 'text-codex'}>
                   {id === 'kimi' ? '◆' : '◇'}
                 </span>
-                <span className="truncate">{row?.displayName ?? id}</span>
+                <span className="min-w-0 flex-1 truncate">{row?.displayName ?? id}</span>
               </span>
               <span className="shrink-0 text-meta tabular-nums text-ink-muted">
                 {row?.sessionHint ?? 0}
@@ -120,7 +120,9 @@ export function SourceSidebar() {
                       active ? 'font-medium text-ink' : 'text-ink-muted hover:text-ink'
                     }`}
                   >
-                    <span className="truncate">{project.name || baseName(project.projectPath)}</span>
+                    <span className="min-w-0 flex-1 truncate">
+                      {project.name || baseName(project.projectPath)}
+                    </span>
                     <span className="shrink-0 pl-2 text-meta tabular-nums text-ink-muted">
                       {project.sessionCount}
                     </span>

@@ -347,7 +347,7 @@ export function SyncPage() {
                           {archives.map((entry) => (
                             <div key={entry.relPath} className="flex items-center gap-2 py-1 text-body">
                               <StatusPill tone="neutral">{entry.compression}</StatusPill>
-                              <span className="truncate text-ink">
+                              <span className="min-w-0 flex-1 truncate text-ink">
                                 {entry.title ?? entry.sessionId}
                               </span>
                               <span className="ml-auto shrink-0 text-meta text-ink-muted">
@@ -378,7 +378,7 @@ export function SyncPage() {
                                 {change.index}
                                 {change.worktree}
                               </span>
-                              <span className="truncate">{change.path}</span>
+                              <span className="min-w-0 flex-1 truncate">{change.path}</span>
                             </div>
                           ))}
                         </div>
@@ -419,7 +419,9 @@ export function SyncPage() {
                             hint={source.notes ?? undefined}
                           >
                             <span className="flex items-center gap-2">
-                              <span className="truncate">{source.rootPath ?? '未找到'}</span>
+                              <span className="min-w-0 flex-1 truncate">
+                                {source.rootPath ?? '未找到'}
+                              </span>
                               <StatusPill tone={source.found ? 'success' : 'warning'}>
                                 {source.found ? '可用' : '未找到'}
                               </StatusPill>

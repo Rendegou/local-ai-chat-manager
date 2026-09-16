@@ -109,17 +109,18 @@ export default function App() {
 
   return (
     <div className="flex h-full flex-col bg-canvas text-ink">
-      <header className="flex h-13 shrink-0 items-center gap-3 border-b border-line bg-panel px-3.5 py-2">
+      {/* 极端缩放（200%）下工具栏允许换行：宁可占两行，也不要整页横向滚动 */}
+      <header className="flex min-h-13 shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-panel px-3.5 py-2">
         {/* 左：品牌 + 资料库摘要 */}
         <div className="flex min-w-0 items-baseline gap-2.5">
           <span className="text-title text-ink">Local Chats</span>
-          <span className="truncate text-meta text-ink-muted">
+          <span className="min-w-0 truncate text-meta text-ink-muted">
             {stats ? `${stats.sessions} 会话 · ${stats.messages} 消息` : '索引未就绪'}
           </span>
         </div>
 
-        {/* 中：一级导航 */}
-        <div className="mx-auto flex items-center gap-2">
+        {/* 中：一级导航（窄到放不下时换行到第二行） */}
+        <div className="mx-auto flex min-w-0 items-center gap-2">
           <SegmentedNav
             items={NAV.map((item) => ({ key: item.key, label: item.label, hint: item.hint }))}
             current={page}
@@ -128,7 +129,7 @@ export default function App() {
         </div>
 
         {/* 右：统一状态区 + 操作 */}
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           <StatusArea>
             {scanning ? (
               <Spinner

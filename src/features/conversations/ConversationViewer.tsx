@@ -228,13 +228,15 @@ function MessageBlock({ message }: { message: MessageRow }) {
         ? 'border-l-2 border-l-line-strong bg-canvas/40'
         : 'border-l-2 border-l-transparent'
 
+  // `[overflow-wrap:anywhere]` 而不是 `break-words`：
+  // 前者会参与固有最小宽度计算，长路径 / 长 JSON 才不会把整个阅读区撑宽（200% 缩放时尤其明显）
   const bodyClass = isTool
-    ? 'font-mono text-meta leading-5 whitespace-pre-wrap break-words'
+    ? 'font-mono text-meta leading-5 whitespace-pre-wrap [overflow-wrap:anywhere]'
     : isReasoning
-      ? 'text-meta italic leading-6 text-ink-muted whitespace-pre-wrap break-words'
+      ? 'text-meta italic leading-6 text-ink-muted whitespace-pre-wrap [overflow-wrap:anywhere]'
       : isEvent
-        ? 'text-meta leading-6 text-ink-muted whitespace-pre-wrap break-words'
-        : 'text-body leading-6 whitespace-pre-wrap break-words'
+        ? 'text-meta leading-6 text-ink-muted whitespace-pre-wrap [overflow-wrap:anywhere]'
+        : 'text-body leading-6 whitespace-pre-wrap [overflow-wrap:anywhere]'
 
   return (
     <article className={`my-2 rounded-panel px-3 py-2 ${container}`}>

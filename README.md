@@ -18,7 +18,7 @@
 
 ![会话浏览](docs/images/demo-conversations.png)
 
-> 截图使用的是合成演示数据（`python tools/make_demo_data.py <目录>` 可一键生成，24 个虚构会话、4 个虚构项目）。
+> 截图使用的是合成演示数据（`npm run ui:demo` 一键生成：54 个虚构会话、6 个虚构项目，含长标题与空会话样本）。
 
 左：数据源与项目筛选；中：按日期分组的会话列表（虚拟滚动）；右：会话内容（虚拟滚动 + 分页加载，工具消息可折叠）。
 
@@ -171,6 +171,10 @@ aichat-cli bench-session --size-mb 100
 npx tauri build --bundles nsis
   → 产出 target/release/local-ai-chat-manager.exe + NSIS 安装包（3.1 MB）
   → 运行 exe：自动探测数据源、建立索引（325 会话 / 77,263 消息）、监听两个会话目录、渲染完整界面
+
+# 前端视觉与无障碍（截图 + 断言，见 docs/UI-QA.md）
+npm run ui:qa                     → 横向溢出 / 嵌套滚动 / 焦点可达 / 大列表虚拟化
+npm run ui:a11y                   → 深色与浅色主题的 WCAG AA 对比度审计
 
 # 代码质量（规格 §31：每阶段都跑 formatter 与 lint）
 cargo fmt --all -- --check        → 无格式差异
