@@ -21,11 +21,12 @@ interface SyncState {
   loadArchives: () => Promise<void>
   archiveOld: () => Promise<void>
   restore: (relPath: string) => Promise<void>
+  clearError: () => void
   setProgress: (progress: string | null) => void
   setRunning: (running: boolean) => void
 }
 
-export const useSync = create<SyncState>((set, get) => ({
+export const useSync = create<SyncState>((set) => ({
   status: null,
   report: null,
   archives: [],
@@ -36,7 +37,7 @@ export const useSync = create<SyncState>((set, get) => ({
 
   /** 读取仓库状态（分支 / 远端 / 变更 / 冲突）。 */
   refresh: async () => {
-    set({ loading: true })
+    set({ loading: true, error: null })
     try {
       set({ status: await ipc.syncStatus() })
     } catch (error) {
@@ -48,16 +49,17 @@ export const useSync = create<SyncState>((set, get) => ({
 
   /** 执行一次同步（后端通过事件推送每一步进度）。 */
   run: async (options) => {
-    set({ running: true, progress: null })
+    set({ running: true, progress: null, error: null })
+    let report: SyncReport | null = null
     try {
-      const report = await ipc.syncNow(options)
-      set({ report })
-      await get().refresh()
-      await get().loadArchives()
+      report = await ipc.syncNow(options)
+      const [status, archives] = await Promise.all([ipc.syncStatus(), ipc.listArchives()])
+      set({ report, status, archives })
       return report
     } catch (error) {
       set({ error: error as ipc.IpcError })
-      return null
+      // 同步本身成功、仅刷新视图失败时，仍把报告交给页面展示。
+      return report
     } finally {
       set({ running: false, progress: null })
     }
@@ -65,9 +67,10 @@ export const useSync = create<SyncState>((set, get) => ({
 
   /** 冲突处理：中止 rebase（不自动合并、不丢数据）。 */
   abortRebase: async () => {
+    set({ error: null })
     try {
       await ipc.abortRebase()
-      await get().refresh()
+      set({ status: await ipc.syncStatus() })
     } catch (error) {
       set({ error: error as ipc.IpcError })
     }
@@ -75,6 +78,7 @@ export const useSync = create<SyncState>((set, get) => ({
 
   /** 归档列表。 */
   loadArchives: async () => {
+    set({ error: null })
     try {
       set({ archives: await ipc.listArchives() })
     } catch (error) {
@@ -84,9 +88,10 @@ export const useSync = create<SyncState>((set, get) => ({
 
   /** 按天数阈值批量归档。 */
   archiveOld: async () => {
+    set({ error: null })
     try {
       await ipc.archiveOldSessions()
-      await get().loadArchives()
+      set({ archives: await ipc.listArchives() })
     } catch (error) {
       set({ error: error as ipc.IpcError })
     }
@@ -94,15 +99,17 @@ export const useSync = create<SyncState>((set, get) => ({
 
   /** 从归档恢复。 */
   restore: async (relPath) => {
+    set({ error: null })
     try {
       await ipc.restoreArchive(relPath)
-      await get().loadArchives()
-      await get().refresh()
+      const [archives, status] = await Promise.all([ipc.listArchives(), ipc.syncStatus()])
+      set({ archives, status })
     } catch (error) {
       set({ error: error as ipc.IpcError })
     }
   },
 
+  clearError: () => set({ error: null }),
   setProgress: (progress) => set({ progress }),
   setRunning: (running) => set({ running }),
 }))

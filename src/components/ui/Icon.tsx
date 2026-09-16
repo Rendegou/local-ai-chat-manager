@@ -24,6 +24,9 @@ export type IconName =
   | 'archive'
   | 'branch'
   | 'terminal'
+  | 'minimize'
+  | 'maximize'
+  | 'restore'
 
 /** 图标路径：stroke 类用描边，fill 类（仅 more 的圆点）用填充。 */
 const PATHS: Record<IconName, ReactNode> = {
@@ -115,6 +118,15 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <path d="M4.4 4.6 8 8l-3.6 3.4" />
       <path d="M8.8 11.4h3" />
+    </>
+  ),
+  /* 窗口控制（自绘标题栏）：最小化横线 / 最大化方框 / 还原叠框 */
+  minimize: <path d="M3.4 8h9.2" />,
+  maximize: <rect x="3.4" y="3.4" width="9.2" height="9.2" rx="1.2" />,
+  restore: (
+    <>
+      <path d="M5.6 5.6V3.8a1.2 1.2 0 0 1 1.2-1.2h5.4a1.2 1.2 0 0 1 1.2 1.2v5.4a1.2 1.2 0 0 1-1.2 1.2h-1.8" />
+      <rect x="2.6" y="5.6" width="7.8" height="7.8" rx="1.2" />
     </>
   ),
 }

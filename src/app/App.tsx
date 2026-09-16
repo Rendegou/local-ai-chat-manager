@@ -9,7 +9,8 @@
  * 「扫描」不再永久占据主按钮：索引为空时它是主动作，之后退到「更多操作」，
  * 进度则进入统一状态区。
  */
-import { useEffect } from 'react'
+import { useEffect, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 
 import * as ipc from '../lib/ipc'
 import { useLibrary, type PageKey } from '../stores/library'
@@ -40,6 +41,106 @@ const NAV: Array<{ key: PageKey; label: string; hint: string }> = [
   { key: 'sync', label: '同步', hint: '通过 Git 在多台电脑之间同步' },
   { key: 'settings', label: '设置', hint: '数据目录 / 仓库 / 归档' },
 ]
+
+/** 是否在真实 Tauri 窗口里（纯浏览器里隐藏窗口控制、拖动也不生效）。 */
+const IS_TAURI = '__TAURI_INTERNALS__' in window
+const WINDOW_STATE_CHANGED = 'aichat-window-state-changed'
+
+function notifyWindowStateChanged() {
+  window.dispatchEvent(new Event(WINDOW_STATE_CHANGED))
+}
+
+/**
+ * 惰性取当前窗口：mock 浏览器（截图 QA）里 __TAURI_INTERNALS__ 是被伪造的，
+ * getCurrentWindow() 可能直接抛错；所有窗口调用都经这里，失败即静默 no-op。
+ */
+function safeWindow() {
+  if (!IS_TAURI) return null
+  try {
+    return getCurrentWindow()
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 自绘标题栏拖动（无边框窗口）：
+ * 点按头部空白处拖动窗口；交互控件（按钮/输入框/菜单等）不触发拖动；
+ * 双击空白处切换最大化。最大化状态也必须把拖动交给系统，Windows 会在拖动时还原窗口；
+ * 不用 data-tauri-drag-region——区域内有大量按钮，手动过滤交互边界更可控。
+ */
+function onCaptionMouseDown(event: ReactMouseEvent<HTMLElement>) {
+  const win = safeWindow()
+  if (event.button !== 0 || !win) return
+  const target = event.target as HTMLElement
+  if (target.closest('button, a, input, select, textarea, label, [role="button"], [role="menu"], [role="listbox"]')) {
+    return
+  }
+  event.preventDefault()
+  if (event.detail === 2) {
+    void win.toggleMaximize().then(notifyWindowStateChanged).catch(() => {})
+  } else {
+    // 不预先拦截最大化窗口：startDragging 会走 Windows 原生标题栏拖动语义，
+    // 从屏幕顶部拖下时自动恢复为普通窗口。
+    void win.startDragging().then(notifyWindowStateChanged).catch(() => {})
+  }
+}
+
+/** 窗口控制按钮（最小化 / 最大化-还原 / 关闭）：贴在窗口右上角，样式随主题。 */
+function WindowControls() {
+  const [maximized, setMaximized] = useState(false)
+  useEffect(() => {
+    const win = safeWindow()
+    if (!win) return
+    const refresh = () => {
+      void win.isMaximized().then((value) => setMaximized(Boolean(value))).catch(() => {})
+    }
+    refresh()
+    window.addEventListener(WINDOW_STATE_CHANGED, refresh)
+    return () => window.removeEventListener(WINDOW_STATE_CHANGED, refresh)
+  }, [])
+  if (!IS_TAURI) return null
+  const toggleMaximize = () => {
+    const win = safeWindow()
+    if (!win) return
+    void win
+      .toggleMaximize()
+      .then(() => win.isMaximized())
+      .then((value) => setMaximized(Boolean(value)))
+      .catch(() => {})
+  }
+  return (
+    <div className="-my-[9px] -mr-[16px] ml-1 flex self-stretch">
+      <button
+        type="button"
+        aria-label="最小化"
+        title="最小化"
+        className="win-btn"
+        onClick={() => void safeWindow()?.minimize().catch(() => {})}
+      >
+        <Icon name="minimize" size={14} />
+      </button>
+      <button
+        type="button"
+        aria-label={maximized ? '还原窗口' : '最大化'}
+        title={maximized ? '还原' : '最大化'}
+        className="win-btn"
+        onClick={toggleMaximize}
+      >
+        <Icon name={maximized ? 'restore' : 'maximize'} size={14} />
+      </button>
+      <button
+        type="button"
+        aria-label="关闭"
+        title="关闭"
+        className="win-btn win-btn-close"
+        onClick={() => void safeWindow()?.close().catch(() => {})}
+      >
+        <Icon name="close" size={14} />
+      </button>
+    </div>
+  )
+}
 
 export default function App() {
   const {
@@ -116,20 +217,25 @@ export default function App() {
   const filtersActive = filterSummary !== '全部会话'
 
   return (
-    <div className="flex h-full flex-col bg-canvas text-ink">
-      {/* 极端缩放（200%）下工具栏允许换行：宁可占两行，也不要整页横向滚动 */}
-      <header className="flex min-h-13 shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-panel px-3.5 py-2">
+    <div className="app-shell flex h-full flex-col text-ink">
+      {/* 极端缩放（200%）下工具栏允许换行：宁可占两行，也不要整页横向滚动；
+          无边框窗口下整个头部同时是拖动区（双击空白切换最大化） */}
+      <header className="app-header select-none" onMouseDown={onCaptionMouseDown}>
         {/* 左：品牌 + 资料库摘要 */}
-        <div className="flex min-w-0 items-center gap-2">
-          <img src={appIcon} alt="" className="h-5 w-5 rounded-[5px]" />
-          <span className="text-title text-ink">Local Chats</span>
-          <span className="min-w-0 truncate pl-0.5 text-meta text-ink-muted">
-            {stats ? `${stats.sessions} 会话 · ${stats.messages} 消息` : '索引未就绪'}
+        <div className="app-brand">
+          <span className="app-brand-icon">
+            <img src={appIcon} alt="" className="h-5 w-5 rounded-[5px]" />
+          </span>
+          <span className="app-brand-copy">
+            <span className="app-brand-title">Local Chats</span>
+            <span className="app-brand-meta">
+              {stats ? `${stats.sessions} 个会话 · ${stats.messages} 条消息` : '本地索引尚未就绪'}
+            </span>
           </span>
         </div>
 
         {/* 中：一级导航（窄到放不下时换行到第二行） */}
-        <div className="mx-auto flex min-w-0 items-center gap-2">
+        <div className="app-primary-nav flex min-w-0 items-center">
           <SegmentedNav
             items={NAV.map((item) => ({ key: item.key, label: item.label, hint: item.hint }))}
             current={page}
@@ -138,7 +244,7 @@ export default function App() {
         </div>
 
         {/* 右：统一状态区 + 操作 */}
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <div className="app-actions">
           <StatusArea>
             {scanning ? (
               <Spinner
@@ -211,6 +317,9 @@ export default function App() {
             </Button>
           ) : null}
         </div>
+
+        {/* 窗口控制（无边框窗口）：最小化 / 最大化 / 关闭，贴在右上角 */}
+        <WindowControls />
       </header>
 
       {filtersOpen && !wideEnough && page === 'conversations' ? (
@@ -244,7 +353,6 @@ export default function App() {
               <>
                 <Button
                   size="sm"
-                  tone="primary"
                   onClick={() => {
                     void useLibrary.getState().saveSettingsDraft().then((ok) => {
                       if (ok) confirmLeaveSettings()

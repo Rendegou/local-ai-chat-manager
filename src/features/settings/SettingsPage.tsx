@@ -109,8 +109,8 @@ export function SettingsPage() {
         }
       />
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        <div className="mx-auto flex w-full max-w-[860px] flex-col gap-3">
+      <div className="min-h-0 flex-1 overflow-y-auto p-5">
+        <div className="mx-auto flex w-full max-w-[980px] flex-col gap-4">
           {error ? (
             <Notice tone="danger" title={error.message}>
               {error.kind}

@@ -29,7 +29,7 @@ import {
 
 /** 搜索页。 */
 export function SearchPage() {
-  const { machines, projects, setPage, selectSession } = useLibrary()
+  const { machines, projects, setPage, selectSession, setLocateMessage } = useLibrary()
   const [text, setText] = useState('')
   const [order, setOrder] = useState<'relevance' | 'recent'>('relevance')
   // 高级筛选（默认收起，但状态始终保留）
@@ -145,8 +145,8 @@ export function SearchPage() {
       />
 
       {/* 主搜索区：关键词 + 搜索 + 高级筛选入口 + 已启用筛选 chips */}
-      <div className="border-b border-line bg-panel px-4 py-3">
-        <div className="mx-auto w-full max-w-[920px]">
+      <div className="bg-panel/55 px-5 py-4">
+        <div className="mx-auto w-full max-w-[980px]">
           <div className="flex items-center gap-2">
             <TextInput
               value={text}
@@ -207,7 +207,7 @@ export function SearchPage() {
 
           {/* 高级筛选：默认收起，功能与之前完全一致 */}
           {advancedOpen ? (
-            <div className="mt-3 rounded-panel border border-line bg-canvas p-3">
+            <div className="section-card mt-3 rounded-panel p-4">
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <label className="flex flex-col gap-1 text-meta text-ink-muted">
                   来源
@@ -296,12 +296,16 @@ export function SearchPage() {
             description={`FTS5 查询：${response.matchQuery}。可尝试减少关键词或放宽筛选条件。`}
           />
         ) : null}
-        <div className="mx-auto w-full max-w-[920px] px-2 py-2">
-          {response?.hits.map((hit) => (
+        {/* 结果列表：仅在有结果时渲染容器——空的 py-4 容器会把空状态顶出 32px 的幽灵滚动条 */}
+        {response && response.hits.length > 0 ? (
+          <div className="mx-auto w-full max-w-[980px] px-4 py-4">
+            {response.hits.map((hit) => (
             <button
               key={hit.messageId}
               type="button"
               onClick={() => {
+                // 定位到具体消息：阅读器直接加载目标前后文窗口并居中高亮
+                setLocateMessage({ sessionId: hit.sessionId, sequence: hit.sequence })
                 setPage('conversations')
                 void selectSession(hit.sessionId)
               }}
@@ -331,8 +335,9 @@ export function SearchPage() {
                 </span>
               </div>
             </button>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : null}
         {response?.hasMore ? (
           <div className="flex justify-center py-3">
             <Button

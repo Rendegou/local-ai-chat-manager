@@ -1,8 +1,8 @@
 /**
- * 全局样式与设计令牌 —— 「石墨工作台」（docs/FRONTEND_VISUAL_REDESIGN.md §4）
+ * 全局样式与设计令牌 —— 「档案桌」（docs/FRONTEND_VISUAL_REDESIGN.md §4）
  *
- * 设计取向：开发者深夜翻查 AI 会话档案的工作台（Raycast/Linear 级桌面工具正典）。
- * 深色是主场：石墨底 + 冷色环境光；浅色是白天场景：暖纸面 + 真对比。
+ * 设计取向：一张真正用于长期阅读、检索与归档的桌面，而不是通用后台换肤。
+ * 深色是炭黑与旧铜，浅色是纸张与墨色；同一套信息层级，不做机械反色。
  *
  * 三条硬规则（所有页面都必须遵守）：
  * 1. 表面分层：canvas（最底）< panel（来源栏/列表）< reading（正文）< overlay（浮层）；
@@ -66,7 +66,7 @@
 
   /* ---------- 类型层级（只保留这几级） ----------
    * 层级靠「字号 × 字重 × 字距」三者拉开，不再只靠字号差异。 */
-  --text-title: 1rem; /* 16px 页面标题 */
+  --text-title: 1.0625rem; /* 17px 页面标题 */
   --text-title--line-height: 1.4;
   --text-title--font-weight: 620;
   --text-title--letter-spacing: -0.012em;
@@ -74,7 +74,7 @@
   --text-lead--line-height: 1.5;
   --text-lead--font-weight: 560;
   --text-lead--letter-spacing: -0.006em;
-  --text-body: 0.84375rem; /* 13.5px 正文与控件 */
+  --text-body: 0.875rem; /* 14px 正文与控件 */
   --text-body--line-height: 1.6;
   --text-body--font-weight: 400;
   --text-meta: 0.75rem; /* 12px 元数据（路径、时间、设备、状态） */
@@ -84,10 +84,10 @@
   --text-micro--line-height: 1.45;
 
   /* ---------- 圆角（收敛到三档 + 消息卡） ---------- */
-  --radius-control: 6px;
-  --radius-panel: 8px;
-  --radius-overlay: 12px;
-  --radius-msg: 12px; /* 用户消息卡 */
+  --radius-control: 8px;
+  --radius-panel: 12px;
+  --radius-overlay: 16px;
+  --radius-msg: 14px; /* 用户消息卡 */
 
   /* ---------- 深度（每套主题一份，见 :root） ---------- */
   --shadow-panel: var(--depth-panel); /* 分组卡、分段导航激活块 */
@@ -97,37 +97,44 @@
   --shadow-msg: var(--depth-msg); /* 用户消息卡 */
 }
 
-/* ---------------- 深色主题（石墨 + 冷色环境光，主场） ---------------- */
+/* ---------------- 深色主题（炭黑 + 旧铜，主场） ---------------- */
 :root {
-  --surface-canvas: oklch(0.178 0.006 264);
-  --surface-panel: oklch(0.216 0.007 264);
-  --surface-reading: oklch(0.247 0.008 264);
-  --surface-overlay: oklch(0.283 0.01 264);
-  --surface-hover: oklch(1 0 0 / 0.05);
+  --surface-canvas: oklch(0.15 0.012 58);
+  --surface-panel: oklch(0.188 0.013 58);
+  --surface-reading: oklch(0.218 0.014 58);
+  --surface-overlay: oklch(0.26 0.016 58);
+  --surface-hover: oklch(1 0 0 / 0.055);
   --surface-selected: color-mix(in oklch, var(--semantic-accent) 14%, transparent);
-  --surface-term: oklch(0.152 0.005 264);
+  --surface-term: oklch(0.12 0.008 58);
+  /* 输入框皮肤：比 panel 亮一档 + 清晰描边——深底上的「内陷黑洞」会找不到（见 .field） */
+  --surface-field: oklch(0.212 0.014 58);
+  --field-ring: color-mix(in oklch, var(--line-strong) 78%, transparent);
 
-  --ink: oklch(0.945 0.003 264);
-  --ink-muted: oklch(0.775 0.007 264); /* 元数据主色：对比度 ≈ 7:1 */
-  --ink-faint: oklch(0.685 0.009 264); /* 三级信息：在 term 深块上也保持 ≥ 4.5:1 */
+  --ink: oklch(0.94 0.012 82);
+  --ink-muted: oklch(0.76 0.016 76); /* 元数据主色：对比度 ≈ 7:1 */
+  --ink-faint: oklch(0.65 0.016 74); /* 三级信息：在 term 深块上也保持 ≥ 4.5:1 */
 
-  --line: oklch(0.305 0.007 264);
-  --line-strong: oklch(0.41 0.009 264);
+  --line: oklch(0.295 0.016 58);
+  --line-strong: oklch(0.405 0.02 58);
 
-  /* 信号蓝：克制的单 accent 策略（Restrained） */
-  --semantic-accent: oklch(0.72 0.13 250);
-  --semantic-accent-strong: oklch(0.62 0.15 252);
-  --semantic-success: oklch(0.76 0.14 152);
-  --semantic-warning: oklch(0.85 0.115 82);
+  /* 旧铜：比常见 SaaS 蓝更安静，也更符合“本地档案”而非在线服务的性格 */
+  --semantic-accent: oklch(0.78 0.125 74);
+  --semantic-accent-strong: oklch(0.68 0.14 64);
+  /* 主按钮填充：比文字用 accent 更暗、更低饱和的实心铜——不再用金色渐变 */
+  --accent-fill: oklch(0.69 0.095 68);
+  --accent-fill-ring: color-mix(in oklch, var(--accent-ink) 28%, transparent);
+  --semantic-success: oklch(0.74 0.12 150);
+  --semantic-warning: oklch(0.82 0.125 76);
   --semantic-danger: oklch(0.7 0.175 25);
-  --semantic-info: oklch(0.78 0.09 215);
-  --source-codex: oklch(0.74 0.05 250);
-  --source-kimi: oklch(0.79 0.1 190);
-  --accent-ink: oklch(0.21 0.02 264);
+  --semantic-info: oklch(0.75 0.075 215);
+  --source-codex: oklch(0.74 0.045 245);
+  --source-kimi: oklch(0.76 0.075 185);
+  --accent-ink: oklch(0.2 0.025 58);
 
   /* 深度：柔和投影 + 顶内高光，不用满地描边 */
   --depth-panel:
-    0 1px 2px oklch(0 0 0 / 0.28), inset 0 1px 0 oklch(1 0 0 / 0.04);
+    0 1px 1px oklch(0.08 0.02 58 / 0.42), 0 8px 24px oklch(0.08 0.02 58 / 0.12),
+    inset 0 1px 0 oklch(1 0 0 / 0.035);
   --depth-raised:
     0 1px 2px oklch(0 0 0 / 0.3), 0 5px 16px oklch(0 0 0 / 0.24),
     inset 0 1px 0 oklch(1 0 0 / 0.06);
@@ -138,11 +145,11 @@
   --depth-msg:
     0 1px 2px oklch(0 0 0 / 0.26), inset 0 1px 0 oklch(1 0 0 / 0.05);
 
-  /* 阅读区环境光：台灯照在桌面上的冷色微光 */
+  /* 阅读区环境光：暖色台灯从页首落下，不铺满整个画布 */
   --glow-reading: radial-gradient(
-    960px 340px at 50% -110px,
-    color-mix(in oklch, var(--semantic-accent) 8%, transparent),
-    transparent 72%
+    780px 300px at 54% -100px,
+    color-mix(in oklch, var(--semantic-accent) 7%, transparent),
+    transparent 70%
   );
 
   color-scheme: dark;
@@ -151,36 +158,42 @@
 /* ---------------- 浅色主题（暖纸面，禁止直接反色） ---------------- */
 :root:not(.dark),
 .light {
-  --surface-canvas: oklch(0.962 0.005 90);
-  --surface-panel: oklch(0.944 0.006 90);
-  --surface-reading: oklch(0.993 0.002 90);
-  --surface-overlay: oklch(1 0 0);
-  --surface-hover: oklch(0.3 0.02 264 / 0.055);
+  --surface-canvas: oklch(0.95 0.018 84);
+  --surface-panel: oklch(0.928 0.018 84);
+  --surface-reading: oklch(0.985 0.012 88);
+  --surface-overlay: oklch(0.995 0.01 90);
+  --surface-hover: oklch(0.3 0.03 58 / 0.055);
   --surface-selected: color-mix(in oklch, var(--semantic-accent) 11%, transparent);
-  --surface-term: oklch(0.928 0.005 264);
+  --surface-term: oklch(0.91 0.014 78);
+  /* 输入框皮肤：接近白的纸面 + 清晰描边 */
+  --surface-field: oklch(0.995 0.008 90);
+  --field-ring: color-mix(in oklch, var(--line-strong) 82%, transparent);
 
-  --ink: oklch(0.245 0.008 264);
-  --ink-muted: oklch(0.455 0.011 264); /* 元数据主色：对比度 ≈ 8:1 */
-  --ink-faint: oklch(0.5 0.013 264); /* 三级信息：保持 ≥ 4.5:1（11px 也过 AA） */
+  --ink: oklch(0.235 0.025 52);
+  --ink-muted: oklch(0.445 0.024 54); /* 元数据主色：对比度 ≈ 8:1 */
+  --ink-faint: oklch(0.49 0.022 56); /* 三级信息：保留余量地达到 ≥ 4.5:1（11px 也过 AA） */
 
-  --line: oklch(0.882 0.006 90);
-  --line-strong: oklch(0.79 0.008 90);
+  --line: oklch(0.84 0.022 82);
+  --line-strong: oklch(0.75 0.028 76);
 
-  --semantic-accent: oklch(0.5 0.165 255);
-  --semantic-accent-strong: oklch(0.435 0.16 255);
+  --semantic-accent: oklch(0.5 0.145 60);
+  --semantic-accent-strong: oklch(0.43 0.14 55);
+  /* 主按钮填充：实心深铜，白字；低饱和，不再渐变 */
+  --accent-fill: oklch(0.52 0.105 58);
+  --accent-fill-ring: color-mix(in oklch, var(--accent-ink) 22%, transparent);
   --semantic-success: oklch(0.455 0.12 152);
   --semantic-warning: oklch(0.435 0.115 62);
   --semantic-danger: oklch(0.525 0.19 25);
-  --semantic-info: oklch(0.5 0.1 220);
-  --source-codex: oklch(0.45 0.05 250);
-  --source-kimi: oklch(0.47 0.09 190);
+  --semantic-info: oklch(0.48 0.085 215);
+  --source-codex: oklch(0.44 0.045 245);
+  --source-kimi: oklch(0.45 0.075 185);
   --accent-ink: oklch(0.99 0 0);
 
-  --depth-panel: 0 1px 2px oklch(0.3 0.02 264 / 0.06), 0 3px 10px oklch(0.3 0.02 264 / 0.04);
-  --depth-raised: 0 1px 2px oklch(0.3 0.02 264 / 0.08), 0 6px 18px oklch(0.3 0.02 264 / 0.08);
-  --depth-overlay: 0 2px 6px oklch(0.3 0.02 264 / 0.08), 0 18px 44px oklch(0.3 0.02 264 / 0.14);
-  --depth-sunken: inset 0 1px 2px oklch(0.3 0.02 264 / 0.07);
-  --depth-msg: 0 1px 2px oklch(0.3 0.02 264 / 0.08);
+  --depth-panel: 0 1px 2px oklch(0.3 0.04 58 / 0.07), 0 10px 28px oklch(0.3 0.04 58 / 0.05);
+  --depth-raised: 0 1px 2px oklch(0.3 0.04 58 / 0.1), 0 7px 20px oklch(0.3 0.04 58 / 0.09);
+  --depth-overlay: 0 2px 6px oklch(0.3 0.04 58 / 0.1), 0 20px 48px oklch(0.3 0.04 58 / 0.15);
+  --depth-sunken: inset 0 1px 2px oklch(0.3 0.04 58 / 0.08);
+  --depth-msg: 0 1px 2px oklch(0.3 0.04 58 / 0.09);
 
   --glow-reading: radial-gradient(
     960px 340px at 50% -110px,
@@ -199,15 +212,29 @@ body,
 }
 
 body {
-  background: var(--surface-canvas);
+  background:
+    radial-gradient(1000px 520px at 8% -16%, color-mix(in oklch, var(--semantic-accent) 7%, transparent), transparent 68%),
+    var(--surface-canvas);
   color: var(--ink);
   font-family: var(--font-sans);
   /* 正文基准 13.5px：不再把关键信息压在 10.5–12px */
-  font-size: 0.84375rem;
+  font-size: 0.875rem;
   line-height: 1.6;
   caret-color: var(--semantic-accent);
   overscroll-behavior: none;
   -webkit-font-smoothing: antialiased;
+}
+
+/* 极轻微纸张颗粒：打破纯色面板的廉价数字感，不影响点击和可读性。 */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  pointer-events: none;
+  opacity: 0.022;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 140 140' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.7'/%3E%3C/svg%3E");
+  mix-blend-mode: soft-light;
 }
 
 /* ---------------- 基础层：焦点、选区、滚动条、动效 ---------------- */
@@ -282,6 +309,215 @@ body {
   background-repeat: no-repeat;
 }
 
+/* ---------------- 应用框架：档案桌 ---------------- */
+.app-shell {
+  isolation: isolate;
+  background:
+    radial-gradient(900px 430px at 15% -22%, color-mix(in oklch, var(--semantic-accent) 6%, transparent), transparent 70%),
+    var(--surface-canvas);
+}
+
+.app-header {
+  position: relative;
+  z-index: 40;
+  display: flex;
+  min-height: 64px;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 20px;
+  padding: 9px 16px;
+  background: color-mix(in oklch, var(--surface-panel) 92%, transparent);
+  border-bottom: 1px solid color-mix(in oklch, var(--line) 78%, transparent);
+  box-shadow: 0 8px 30px color-mix(in oklch, var(--surface-canvas) 65%, transparent);
+  backdrop-filter: blur(18px) saturate(1.1);
+}
+
+.app-brand {
+  display: flex;
+  min-width: 215px;
+  align-items: center;
+  gap: 10px;
+}
+
+.app-brand-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  place-items: center;
+  border-radius: 10px 10px 10px 4px;
+  background: var(--surface-overlay);
+  box-shadow: var(--depth-panel), inset 0 0 0 1px color-mix(in oklch, var(--line-strong) 52%, transparent);
+}
+
+.app-brand-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.app-brand-title {
+  font-family: var(--font-display);
+  font-size: 0.975rem;
+  font-weight: 670;
+  letter-spacing: -0.025em;
+}
+
+.app-brand-meta {
+  margin-top: 3px;
+  color: var(--ink-muted);
+  font-size: var(--text-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+.app-primary-nav {
+  margin-inline: auto;
+}
+
+.app-actions {
+  display: flex;
+  min-width: 215px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* 窗口控制按钮（无边框窗口的自绘标题栏）：满高、44px 宽、方形，
+ * 靠负 margin 贴到头部右上边缘；关闭按钮 hover 用危险红（Windows 惯例） */
+.win-btn {
+  display: flex;
+  width: 44px;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-muted);
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+.win-btn:hover {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+.win-btn-close:hover {
+  background: var(--semantic-danger);
+  color: oklch(0.99 0 0);
+}
+
+.workspace-grid {
+  gap: 8px;
+  padding: 8px;
+}
+
+.workspace-panel {
+  overflow: hidden;
+  border: 1px solid color-mix(in oklch, var(--line) 76%, transparent);
+  border-radius: var(--radius-panel);
+  background: var(--surface-panel);
+  box-shadow: var(--depth-panel);
+}
+
+.reading-panel {
+  background: var(--surface-reading);
+}
+
+.panel-header {
+  background: color-mix(in oklch, var(--surface-panel) 88%, var(--surface-reading));
+  border-bottom: 1px solid color-mix(in oklch, var(--line) 68%, transparent);
+  padding: 12px 16px;
+}
+
+.section-card {
+  border: 1px solid color-mix(in oklch, var(--line) 70%, transparent);
+  background: color-mix(in oklch, var(--surface-panel) 82%, var(--surface-reading));
+  box-shadow: var(--depth-panel);
+}
+
+.session-row {
+  position: relative;
+  border: 1px solid transparent;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.session-row:hover {
+  border-color: color-mix(in oklch, var(--line-strong) 52%, transparent);
+  background: var(--surface-hover);
+}
+
+.session-row-active {
+  border-color: color-mix(in oklch, var(--semantic-accent) 30%, transparent);
+  background: color-mix(in oklch, var(--semantic-accent) 11%, var(--surface-panel));
+  box-shadow: inset 3px 0 0 var(--semantic-accent), 0 5px 18px color-mix(in oklch, var(--surface-canvas) 42%, transparent);
+}
+
+.conversation-stream::before {
+  content: '';
+  position: absolute;
+  top: 24px;
+  bottom: 24px;
+  left: 5px;
+  width: 1px;
+  background: linear-gradient(transparent, var(--line) 4%, var(--line) 96%, transparent);
+}
+
+.message-assistant {
+  position: relative;
+  padding-left: 18px;
+}
+
+.message-assistant::before {
+  content: '';
+  position: absolute;
+  top: 8px;
+  left: 1px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--surface-reading);
+  box-shadow: inset 0 0 0 2px var(--line-strong);
+}
+
+@media (max-width: 1100px) {
+  .app-header {
+    gap: 8px 12px;
+  }
+  .app-brand,
+  .app-actions {
+    min-width: 0;
+  }
+  .app-brand-meta {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-primary-nav {
+    order: 3;
+    width: 100%;
+  }
+  .app-primary-nav .nav-track {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .app-actions {
+    margin-left: auto;
+  }
+  .workspace-grid {
+    gap: 0;
+    padding: 0;
+  }
+  .workspace-panel {
+    border-width: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+}
+
 /* 浮层入场：一次 authored motion（菜单、抽屉共用），不进虚拟列表 */
 @keyframes overlay-pop {
   from {
@@ -305,14 +541,13 @@ mark {
   padding: 0 2px;
 }
 
-/* 主按钮：accent 渐变 + 浮起投影（与 hover 的 brightness 叠加使用） */
+/* 主按钮：实心低饱和铜 + 细 inset 边（不再用金色渐变与高光——
+ * 主操作靠「每屏至多一个」表达，不靠金属感吸引眼球） */
 .btn-primary {
-  background-image: linear-gradient(
-    180deg,
-    color-mix(in oklch, var(--semantic-accent) 88%, white),
-    var(--semantic-accent-strong)
-  );
-  box-shadow: var(--shadow-raised);
+  background-color: var(--accent-fill);
+  box-shadow:
+    inset 0 0 0 1px var(--accent-fill-ring),
+    var(--depth-raised);
 }
 
 /* 次按钮：升一级的表面 + inset ring（比 border 更锐，不撑布局）+ 轻投影 */
@@ -349,24 +584,62 @@ mark {
   background-color: color-mix(in oklch, var(--semantic-danger) 20%, transparent);
 }
 
-/* 分段导航轨道：内陷；选中块浮起（Shadow + 表面升级） */
+/* 一级导航：不再用通用 segmented control，改成档案索引式标签。 */
 .nav-track {
-  background-color: var(--surface-canvas);
-  box-shadow:
-    inset 0 0 0 1px var(--line),
-    var(--depth-sunken);
+  position: relative;
+  background: transparent;
+}
+
+.nav-item {
+  position: relative;
+  min-width: 58px;
+  border-radius: var(--radius-control);
+  padding: 7px 12px;
+  color: var(--ink-muted);
+  font-size: var(--text-body);
+  font-weight: 520;
+  transition: color 150ms ease, background-color 150ms ease;
+}
+
+.nav-item::after {
+  content: '';
+  position: absolute;
+  right: 16px;
+  bottom: 2px;
+  left: 16px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--semantic-accent);
+  opacity: 0;
+  transform: scaleX(0.45);
+  transition: opacity 150ms ease, transform 180ms cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+.nav-item:hover {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+
+.nav-item-active {
+  color: var(--ink);
+  background: color-mix(in oklch, var(--semantic-accent) 8%, transparent);
+}
+
+.nav-item-active::after {
+  opacity: 1;
+  transform: scaleX(1);
 }
 
 /* ---------------- 控件皮肤（输入框 / 下拉触发器共用） ----------------
- * 内陷：表面降到 canvas，边缘用 inset ring 而不是 border（更锐），
- * 叠一层顶内阴影做出「按进桌面」的深度；状态变化只改 ring 颜色。
+ * 表面用专门的 --surface-field（深色下比 panel 亮一档，不再是「内陷黑洞」），
+ * 边缘用 inset ring 而不是 border（更锐，不撑布局）；状态变化只改 ring 颜色。
  * 鼠标聚焦只改内圈；键盘 focus-visible 还有全局外圈环（见 base 层）。
  */
 .field {
   border-radius: var(--radius-control);
-  background-color: var(--surface-canvas);
+  background-color: var(--surface-field);
   box-shadow:
-    inset 0 0 0 1px var(--line),
+    inset 0 0 0 1px var(--field-ring),
     var(--depth-sunken);
   transition: box-shadow 120ms ease;
 }
@@ -400,17 +673,19 @@ mark {
 /* 用户消息：accent 染色实体卡，与阅读面明显分离。
  * 底色用透明叠染（不混入纸面暖色相，否则浅色主题下发绿） */
 .msg-user {
+  margin-left: 9%;
   border-radius: var(--radius-msg);
-  background: color-mix(in oklch, var(--semantic-accent) 9%, transparent);
-  border: 1px solid color-mix(in oklch, var(--semantic-accent) 24%, transparent);
+  background: color-mix(in oklch, var(--semantic-accent) 10%, var(--surface-reading));
+  border: 1px solid color-mix(in oklch, var(--semantic-accent) 26%, transparent);
   box-shadow: var(--shadow-msg);
 }
 
 /* 工具调用/结果：内陷终端块（等宽、更深表面、可横向滚动） */
 .msg-term {
+  margin-left: 18px;
   border-radius: var(--radius-panel);
   background: var(--surface-term);
-  border: 1px solid var(--line);
+  border: 1px solid color-mix(in oklch, var(--line-strong) 62%, transparent);
   box-shadow: var(--shadow-sunken);
 }
 
@@ -436,4 +711,18 @@ mark {
   font-variant-numeric: tabular-nums;
   color: var(--ink-faint);
   white-space: nowrap;
+}
+
+/* 搜索定位的目标消息：accent 淡染闪一下再回到常态（reduced-motion 下由全局规则瞬时化） */
+.msg-located {
+  border-radius: var(--radius-control);
+  animation: located-flash 2.2s ease-out;
+}
+@keyframes located-flash {
+  from {
+    background-color: color-mix(in oklch, var(--semantic-accent) 18%, transparent);
+  }
+  to {
+    background-color: transparent;
+  }
 }

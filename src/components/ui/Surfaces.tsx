@@ -31,7 +31,7 @@ export function PanelHeader({
 }) {
   return (
     <div
-      className={`shrink-0 border-b border-line bg-panel px-3.5 py-2.5 ${
+      className={`panel-header shrink-0 ${
         sticky ? 'sticky top-0 z-10' : ''
       } ${className}`}
     >
@@ -71,14 +71,14 @@ export function SectionCard({
   children: ReactNode
   className?: string
 }) {
-  // 默认卡：投影 + 顶内高光声明 elevation，不再加描边；danger 卡用语义 inset ring + 淡染
+  // 默认卡：档案页材质 + 轻投影；danger 卡保留语义 inset ring + 淡染
   const skin =
     tone === 'danger'
       ? 'bg-danger/6 shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--semantic-danger)_35%,transparent)]'
-      : 'bg-panel shadow-panel'
+      : 'section-card'
   return (
     <section className={`rounded-panel ${skin} ${className}`}>
-      <header className="flex items-start justify-between gap-3 border-b border-line/70 px-4 py-3">
+      <header className="flex items-start justify-between gap-3 px-5 pb-1.5 pt-4">
         <div className="min-w-0">
           <h3
             className={`font-display text-lead ${tone === 'danger' ? 'text-danger' : 'text-ink'}`}
@@ -91,7 +91,7 @@ export function SectionCard({
         </div>
         {actions ? <div className="flex shrink-0 items-center gap-1.5">{actions}</div> : null}
       </header>
-      <div className="px-4 py-3.5">{children}</div>
+      <div className="px-5 pb-4 pt-2.5">{children}</div>
     </section>
   )
 }

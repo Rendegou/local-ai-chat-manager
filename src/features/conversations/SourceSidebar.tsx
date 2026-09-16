@@ -29,7 +29,7 @@ export function SourceSidebar() {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-panel">
       {/* 数据源 */}
-      <div className="border-b border-line px-2 pb-2">
+      <div className="px-2 pb-3 pt-1">
         <SectionLabel>数据源</SectionLabel>
         <SidebarRow
           active={!filter.source && !filter.projectPath}
@@ -62,7 +62,7 @@ export function SourceSidebar() {
               <p className="text-meta leading-5 text-ink-muted">
                 还没有项目。扫描本机 Codex / Kimi Code 会话后，这里会按项目分组。
               </p>
-              <Button size="sm" tone="primary" onClick={() => void scan(false)} loading={scanning}>
+              <Button size="sm" onClick={() => void scan(false)} loading={scanning}>
                 扫描
               </Button>
               <Button size="sm" tone="ghost" onClick={() => useLibrary.getState().setPage('settings')}>
@@ -105,7 +105,7 @@ export function SourceSidebar() {
       </div>
 
       {/* 底部：索引概况 + 数据源健康 */}
-      <div className="border-t border-line px-3.5 py-2.5">
+      <div className="mx-2 mb-2 rounded-panel bg-canvas/45 px-3 py-2.5 shadow-sunken">
         <div className="flex items-center justify-between py-0.5 text-meta text-ink-muted">
           <span>会话</span>
           <span className="tabular-nums text-ink">{stats?.sessions ?? 0}</span>

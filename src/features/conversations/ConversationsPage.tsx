@@ -41,10 +41,10 @@ export function ConversationsPage() {
   const showDetail = listAndDetail || Boolean(selectedId)
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 bg-canvas">
+    <div className="workspace-grid flex min-h-0 min-w-0 flex-1 bg-canvas">
       {/* 来源/项目栏：宽窗口常驻，窄窗口变成抽屉 */}
       {threeColumn ? (
-        <aside className="flex w-[224px] shrink-0 flex-col overflow-hidden border-r border-line">
+        <aside className="workspace-panel flex w-[232px] shrink-0 flex-col">
           <SourceSidebar />
         </aside>
       ) : filtersOpen ? (
@@ -55,14 +55,14 @@ export function ConversationsPage() {
 
       {/* 会话列表 */}
       {showList ? (
-        <section className="flex w-[350px] shrink-0 flex-col border-r border-line bg-panel max-lg:w-full max-lg:border-r-0">
+        <section className="workspace-panel flex w-[360px] shrink-0 flex-col max-lg:w-full">
           <SessionList />
         </section>
       ) : null}
 
       {/* 会话正文 */}
       {showDetail ? (
-        <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <section className="workspace-panel reading-panel flex min-w-0 flex-1 flex-col">
           {/* 两级视图下提供「返回列表」 */}
           {!listAndDetail && selectedId ? (
             <div className="flex items-center gap-2 border-b border-line bg-panel px-3 py-1.5">

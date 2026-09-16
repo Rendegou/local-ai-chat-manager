@@ -25,6 +25,9 @@ npm run dev            # 另开一个终端
 npm run ui:shots -- --out .ui-shots/phase4 --states normal,empty,conflict
 ```
 
+若受限 Windows 环境把 Edge 子进程拦截为 `0xC0000022`，可仅对本次 QA 显式设置
+`AICHAT_EDGE_NO_SANDBOX=1`。正常开发机保持默认浏览器沙箱，不需要这个开关。
+
 产物在 `.ui-shots/<阶段>/`（已 gitignore，用命令可随时重建）：
 `<页面>-<主题>-<宽度x高度>[-状态].png`，例如 `conversations-dark-1440x900-empty.png`。
 

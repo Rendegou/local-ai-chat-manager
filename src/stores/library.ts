@@ -51,6 +51,8 @@ interface LibraryState {
   filter: SessionFilter
   selected: SessionDetail | null
   selectedId: string | null
+  /** 待定位的消息（搜索结果跳转）：阅读器加载其前后文窗口并滚动居中 */
+  locateMessage: { sessionId: string; sequence: number } | null
 
   // ---- 扫描状态 ----
   scanning: boolean
@@ -88,6 +90,8 @@ interface LibraryState {
   resetFilter: () => void
   loadSessions: (append?: boolean) => Promise<void>
   selectSession: (id: string | null) => Promise<void>
+  /** 设置/清除待定位消息（搜索页跳转到具体消息） */
+  setLocateMessage: (locate: { sessionId: string; sequence: number } | null) => void
   scan: (force?: boolean) => Promise<void>
   setScanning: (scanning: boolean, progress?: { done: number; total: number } | null) => void
 }
@@ -125,6 +129,7 @@ export const useLibrary = create<LibraryState>((set, get) => ({
   filter: { ...DEFAULT_FILTER },
   selected: null,
   selectedId: null,
+  locateMessage: null,
   scanning: false,
   scanProgress: null,
   lastScan: null,
@@ -139,7 +144,12 @@ export const useLibrary = create<LibraryState>((set, get) => ({
     // 与已保存设置逐字段比较，决定是否标记「未保存」
     const saved = get().settings
     const dirty = saved ? JSON.stringify(next) !== JSON.stringify(saved) : true
-    set({ settingsDraft: next, settingsDirty: dirty })
+    // 主题是外观偏好，选择时立即预览；保存仍由设置页显式完成。
+    set({
+      settingsDraft: next,
+      settingsDirty: dirty,
+      ...(patch.theme ? { theme: patch.theme } : {}),
+    })
   },
 
   saveSettingsDraft: async () => {
@@ -150,7 +160,10 @@ export const useLibrary = create<LibraryState>((set, get) => ({
     return ok
   },
 
-  resetSettingsDraft: () => set({ settingsDraft: null, settingsDirty: false }),
+  resetSettingsDraft: () => {
+    const savedTheme = get().settings?.theme ?? 'system'
+    set({ settingsDraft: null, settingsDirty: false, theme: savedTheme })
+  },
 
   setSettingsDirty: (settingsDirty) => set({ settingsDirty }),
 
@@ -165,8 +178,14 @@ export const useLibrary = create<LibraryState>((set, get) => ({
   },
 
   confirmLeaveSettings: () => {
-    const { pendingPage } = get()
-    set({ settingsDirty: false, pendingPage: null, page: pendingPage ?? get().page })
+    const { pendingPage, settings } = get()
+    set({
+      settingsDraft: null,
+      settingsDirty: false,
+      pendingPage: null,
+      page: pendingPage ?? get().page,
+      theme: settings?.theme ?? 'system',
+    })
   },
 
   cancelLeaveSettings: () => set({ pendingPage: null }),
@@ -266,7 +285,7 @@ export const useLibrary = create<LibraryState>((set, get) => ({
   /** 选中会话并加载详情（消息由查看器按需分页拉取）。 */
   selectSession: async (id) => {
     if (!id) {
-      set({ selectedId: null, selected: null })
+      set({ selectedId: null, selected: null, locateMessage: null })
       return
     }
     set({ selectedId: id, selected: null })
@@ -278,6 +297,8 @@ export const useLibrary = create<LibraryState>((set, get) => ({
       set({ error: error as ipc.IpcError })
     }
   },
+
+  setLocateMessage: (locateMessage) => set({ locateMessage }),
 
   /** 触发扫描（后端会把进度通过事件推回来）。 */
   scan: async (force = false) => {

@@ -5,6 +5,10 @@ target/
 node_modules/
 dist/
 
+# Python 临时文件
+__pycache__/
+*.py[cod]
+
 # 本地验证用索引（可删除，用 aichat-cli 重建）
 .verify/
 .bench/

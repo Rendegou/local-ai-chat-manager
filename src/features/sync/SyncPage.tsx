@@ -46,6 +46,7 @@ export function SyncPage() {
     loadArchives,
     archiveOld,
     restore,
+    clearError,
   } = useSync()
   const { sources, loadSessions, setPage } = useLibrary()
   const [remoteInput, setRemoteInput] = useState('')
@@ -154,11 +155,19 @@ export function SyncPage() {
         }
       />
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        <div className="mx-auto flex w-full max-w-[860px] flex-col gap-3">
+      <div className="min-h-0 flex-1 overflow-y-auto p-5">
+        <div className="mx-auto flex w-full max-w-[980px] flex-col gap-4">
           {/* 同步执行/刷新失败：此前静默不可见，失败反馈必须持续到用户看到 */}
           {error ? (
-            <Notice tone="danger" title={error.message}>
+            <Notice
+              tone="danger"
+              title={error.message}
+              actions={
+                <IconButton label="关闭错误提示" size="sm" onClick={clearError}>
+                  <Icon name="close" />
+                </IconButton>
+              }
+            >
               {error.detail ?? error.kind}
             </Notice>
           ) : null}
@@ -262,7 +271,7 @@ export function SyncPage() {
                 title={nextStep.title}
                 actions={
                   nextStep.tone === 'accent' ? (
-                    <Button size="sm" tone="primary" onClick={() => void run({ push: true })} disabled={running}>
+                    <Button size="sm" onClick={() => void run({ push: true })} disabled={running}>
                       立即同步
                     </Button>
                   ) : nextStep.tone === 'warning' ? (
@@ -412,7 +421,7 @@ export function SyncPage() {
                         </Button>
                       </div>
                       {log !== null ? (
-                        <pre className="max-h-48 overflow-auto text-tech leading-5 text-ink-muted">
+                        <pre className="max-h-48 overflow-y-auto text-tech leading-5 text-ink-muted whitespace-pre-wrap [overflow-wrap:anywhere]">
                           {log || '（空仓库）'}
                         </pre>
                       ) : (

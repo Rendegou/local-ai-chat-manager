@@ -122,7 +122,7 @@ export function SegmentedNav({
   return (
     <nav
       aria-label="主导航"
-      className="nav-track flex items-center gap-0.5 rounded-panel p-[3px]"
+      className="nav-track flex items-center gap-1"
     >
       {items.map((item) => {
         const active = item.key === current
@@ -133,11 +133,7 @@ export function SegmentedNav({
             title={item.hint}
             aria-current={active ? 'page' : undefined}
             onClick={() => onSelect(item.key)}
-            className={`rounded-control px-3 py-1 text-body transition-[color,background-color,box-shadow] ${
-              active
-                ? 'bg-overlay font-medium text-ink shadow-panel'
-                : 'text-ink-muted hover:bg-hover hover:text-ink'
-            }`}
+            className={`nav-item ${active ? 'nav-item-active' : ''}`}
           >
             {item.label}
           </button>

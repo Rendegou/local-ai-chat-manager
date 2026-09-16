@@ -39,7 +39,7 @@ export function TextInput({
         onKeyDown?.(event)
         if (event.key === 'Enter' && onEnter) onEnter()
       }}
-      className={`field h-8 w-full px-2.5 text-body text-ink transition-colors placeholder:text-ink-faint ${icon ? 'pl-7.5' : ''} ${className}`}
+      className={`field h-9 w-full px-3 text-body text-ink transition-colors placeholder:text-ink-faint ${icon ? 'pl-8' : ''} ${className}`}
       {...rest}
     />
   )
@@ -62,7 +62,7 @@ export function DateInput({
   return (
     <input
       type="date"
-      className={`field h-8 w-full px-2.5 text-body text-ink ${className}`}
+      className={`field h-9 w-full px-3 text-body text-ink ${className}`}
       {...rest}
     />
   )
@@ -194,7 +194,7 @@ export function Select({
         aria-activedescendant={open ? `${listId}-${active}` : undefined}
         onClick={() => setOpen((value) => !value)}
         onKeyDown={onKeyDown}
-        className="field flex h-8 w-full items-center justify-between gap-2 px-2.5 text-left text-body text-ink"
+        className="field flex h-9 w-full items-center justify-between gap-2 px-3 text-left text-body text-ink"
       >
         <span className="min-w-0 flex-1 truncate">{selected?.label ?? ''}</span>
         <Icon
@@ -222,7 +222,7 @@ export function Select({
                 aria-selected={isSelected}
                 onMouseEnter={() => setActive(index)}
                 onClick={() => choose(index)}
-                className={`flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-body transition-colors ${
+                className={`flex min-h-9 w-full items-center gap-2 px-3 py-2 text-left text-body transition-colors ${
                   isActive ? 'bg-hover' : ''
                 } ${isSelected ? 'font-medium text-accent' : 'text-ink'}`}
               >
@@ -334,7 +334,7 @@ export function DirectoryInput({
       <button
         type="button"
         onClick={onBrowse}
-        className="field flex h-8 shrink-0 items-center gap-1.5 px-2.5 text-body text-ink"
+        className="field flex h-9 shrink-0 items-center gap-1.5 px-3 text-body text-ink"
       >
         <Icon name="folder" size={13} className="text-ink-muted" />
         选择

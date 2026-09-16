@@ -1,7 +1,16 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "主窗口默认权限：仅开放核心能力、目录选择与打开文件（最小权限原则）",
+  "description": "主窗口默认权限：仅开放核心能力、目录选择与打开文件（最小权限原则）；窗口操作用于自绘标题栏（无边框窗口的拖动/最小化/最大化/关闭）",
   "windows": ["main"],
-  "permissions": ["core:default", "dialog:default", "opener:default"]
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    "opener:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-is-maximized",
+    "core:window:allow-close"
+  ]
 }

@@ -6,8 +6,13 @@
  * - 变高行（消息列表）：对未测量过的行使用估算高度，渲染后用 ResizeObserver 回填真实高度。
  *
  * 只渲染「可视区 + overscan」，因此会话列表 1w+、消息列表 10w+ 都能保持 60fps。
+ *
+ * 变高模式的滚动稳定性（否则阅读器滚动时会「抽搐」）：
+ * - 所有行共用一个 ResizeObserver，回调成批处理（不再每行每次渲染都断开/重建观察者）；
+ * - 回填高度时，若该行整体位于视口上方，按高度差同步修正 scrollTop（scroll anchoring），
+ *   视口内内容保持不动——向上翻、向下滚都不跳。
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 /** 虚拟列表参数。 */
 export interface VirtualOptions {
@@ -22,6 +27,19 @@ export interface VirtualOptions {
   estimatedHeight?: number
   /** 上下各多渲染几行，减少快速滚动白屏 */
   overscan?: number
+  /**
+   * 内容身份（如会话 id）：变化时丢弃全部测量缓存。
+   * 不丢弃的话，旧内容的高度会错配到新内容的同一下标上，
+   * 表现就是切换会话后消息流先错一下再逐块纠正。
+   */
+  resetKey?: unknown
+  /**
+   * 行标识（如消息 id）：提供后测量缓存按标识而不是下标存储。
+   * 下标会因过滤切换 / 顶部插入（prepend）而平移，标识不会——
+   * 这两个场景下按下标缓存的高度会整体错位，必须按标识。
+   * 注意：提供 rowKey 后不再按 count 裁剪缓存（身份清理由 resetKey 负责）。
+   */
+  rowKey?: (index: number) => string | number
 }
 
 /** 单个条目的定位信息。 */
@@ -50,6 +68,8 @@ export interface VirtualResult {
   scrollToIndex: (index: number, align?: 'start' | 'center') => void
   /** 当前可视起始下标（用于「滚动到底部加载更多」） */
   visibleEnd: number
+  /** 第一个完整可见条目的下标（不含 overscan；用于「滚动到顶部加载更早」与 sticky 分组头） */
+  visibleStart: number
 }
 
 /**
@@ -59,50 +79,91 @@ export interface VirtualResult {
  * 对已加载的几千条消息来说成本极低。
  */
 export function useVirtual(options: VirtualOptions): VirtualResult {
-  const { count, itemHeight, estimatedHeight = 96, overscan = 6 } = options
+  const { count, itemHeight, estimatedHeight = 96, overscan = 6, resetKey, rowKey } = options
   const [container, setContainer] = useState<HTMLDivElement | null>(null)
-  const containerRef = useCallback((node: HTMLDivElement | null) => setContainer(node), [])
   const [scrollTop, setScrollTop] = useState(0)
   const [viewportHeight, setViewportHeight] = useState(0)
-  // 测量到的高度（仅变高模式使用）
-  const [heights, setHeights] = useState<Map<number, number>>(() => new Map())
-  const observers = useRef<Map<number, ResizeObserver>>(new Map())
+  // 测量到的高度（仅变高模式使用）；heightsRef 是同一份数据的同步镜像，供观察者回调读取。
+  // 键：默认是下标；提供 rowKey 时是行标识（下标会因过滤/prepend 平移，标识不会）。
+  const [heights, setHeights] = useState<Map<string | number, number>>(() => new Map())
+  const heightsRef = useRef<Map<string | number, number>>(new Map())
+  // 单个共用 ResizeObserver + 行 ↔ 节点双向映射（回调里靠它找回行号）
+  const observerRef = useRef<ResizeObserver | null>(null)
+  const nodeOfIndex = useRef(new Map<number, HTMLElement>())
+  const indexOfNode = useRef(new Map<HTMLElement, number>())
+  const refCallbacks = useRef(new Map<number, (node: HTMLElement | null) => void>())
+  const containerElRef = useRef<HTMLDivElement | null>(null)
+  const scrollTopRef = useRef(0)
+  const offsetsRef = useRef<Float64Array>(new Float64Array(0))
+  const estimatedHeightRef = useRef(estimatedHeight)
+  estimatedHeightRef.current = estimatedHeight
+  const rowKeyRef = useRef(rowKey)
+  rowKeyRef.current = rowKey
+
+  const containerRef = useCallback((node: HTMLDivElement | null) => {
+    containerElRef.current = node
+    setContainer(node)
+  }, [])
+
+  /** 第 index 行的缓存键。 */
+  const keyOf = useCallback(
+    (index: number): string | number => rowKeyRef.current?.(index) ?? index,
+    [],
+  )
 
   /** 取第 index 行的高度（函数式高度或测量值）。 */
   const heightOf = useCallback(
     (index: number): number => {
       if (typeof itemHeight === 'function') return itemHeight(index)
       if (typeof itemHeight === 'number') return itemHeight
-      return heights.get(index) ?? estimatedHeight
+      return heights.get(keyOf(index)) ?? estimatedHeight
     },
-    [itemHeight, heights, estimatedHeight],
+    [itemHeight, heights, estimatedHeight, keyOf],
   )
 
   // 监听滚动与容器尺寸（容器挂载 / 卸载时自动重建监听）
   useEffect(() => {
     if (!container) return
-    const onScroll = () => setScrollTop(container.scrollTop)
+    const onScroll = () => {
+      scrollTopRef.current = container.scrollTop
+      setScrollTop(container.scrollTop)
+    }
     container.addEventListener('scroll', onScroll, { passive: true })
     const resize = new ResizeObserver(() => setViewportHeight(container.clientHeight))
     resize.observe(container)
     setViewportHeight(container.clientHeight)
+    scrollTopRef.current = container.scrollTop
     return () => {
       container.removeEventListener('scroll', onScroll)
       resize.disconnect()
     }
   }, [container])
 
-  // 内容变化时清理过期测量（列表被替换 / 截断）
-  useEffect(() => {
-    setHeights((previous) => {
-      if (previous.size === 0) return previous
-      const next = new Map<number, number>()
-      previous.forEach((value, key) => {
-        if (key < count) next.set(key, value)
-      })
-      return next.size === previous.size ? previous : next
+  // 内容身份变化（切换会话）：丢弃旧测量缓存。
+  // 用 layout effect：必须赶在 ResizeObserver 回调（布局后、绘制前）之前清空，
+  // 否则旧高度与新测量会混在一起。
+  useLayoutEffect(() => {
+    heightsRef.current = new Map()
+    setHeights(new Map())
+  }, [resetKey])
+
+  // 内容变化时清理过期测量（列表被替换 / 截断）。
+  // 提供 rowKey 时跳过：键与下标无关，过滤/prepend 都不构成「过期」，清理由 resetKey 负责。
+  useLayoutEffect(() => {
+    if (rowKey) return
+    const previous = heightsRef.current
+    if (previous.size === 0) return
+    let dirty = false
+    const next = new Map<string | number, number>()
+    previous.forEach((value, key) => {
+      if (typeof key === 'number' && key < count) next.set(key, value)
+      else dirty = true
     })
-  }, [count])
+    if (dirty) {
+      heightsRef.current = next
+      setHeights(new Map(next))
+    }
+  }, [count, rowKey])
 
   /** 计算每个条目的起点与高度（前缀和）。 */
   const { offsets, totalSize } = useMemo(() => {
@@ -116,9 +177,90 @@ export function useVirtual(options: VirtualOptions): VirtualResult {
     return { offsets: starts, totalSize: cursor }
   }, [count, heightOf])
 
+  // 观察者回调读取的是 ref 镜像，渲染提交后立刻同步（同样在 RO 回调之前）
+  useLayoutEffect(() => {
+    offsetsRef.current = offsets
+  }, [offsets])
+
+  /** 成批处理测量结果；视口上方的行高变化按差值修正 scrollTop，保持阅读位置不动。 */
+  const handleMeasurements = useCallback(
+    (entries: ResizeObserverEntry[]) => {
+      let deltaAbove = 0
+      let changed = false
+      for (const entry of entries) {
+        const node = entry.target as HTMLElement
+        const index = indexOfNode.current.get(node)
+        if (index == null) continue
+        const height = entry.contentRect.height
+        const key = keyOf(index)
+        const previous = heightsRef.current.get(key) ?? estimatedHeightRef.current
+        if (Math.abs(previous - height) < 1) continue
+        heightsRef.current.set(key, height)
+        changed = true
+        // 该行整体位于视口上方：它变高/变矮会把视口内容往下顶/往上拉。
+        // 读 DOM 上的实时 scrollTop 而不是 ref：prepend 补偿等布局效应刚改过
+        // scrollTop 时，scroll 事件还没送达，ref 是旧值，锚定判断会漏算。
+        const starts = offsetsRef.current
+        const liveScrollTop = containerElRef.current?.scrollTop ?? scrollTopRef.current
+        if (index < starts.length && starts[index] + previous <= liveScrollTop + 1) {
+          deltaAbove += height - previous
+        }
+      }
+      if (!changed) return
+      const scroller = containerElRef.current
+      if (scroller && deltaAbove !== 0) {
+        const next = scroller.scrollTop + deltaAbove
+        scroller.scrollTop = next
+        scrollTopRef.current = next
+        setScrollTop(next)
+      }
+      setHeights(new Map(heightsRef.current))
+    },
+    [keyOf],
+  )
+
+  /** 变高模式：每个条目一个（缓存的）ref 回调，挂到共用观察者上。 */
+  const measureRef = useCallback(
+    (index: number) => {
+      if (typeof itemHeight === 'number' || typeof itemHeight === 'function') return () => {}
+      let callback = refCallbacks.current.get(index)
+      if (!callback) {
+        callback = (node: HTMLElement | null) => {
+          const oldNode = nodeOfIndex.current.get(index)
+          if (oldNode && oldNode !== node) {
+            observerRef.current?.unobserve(oldNode)
+            indexOfNode.current.delete(oldNode)
+            nodeOfIndex.current.delete(index)
+          }
+          if (node) {
+            if (!observerRef.current) {
+              observerRef.current = new ResizeObserver(handleMeasurements)
+            }
+            nodeOfIndex.current.set(index, node)
+            indexOfNode.current.set(node, index)
+            observerRef.current.observe(node)
+          }
+        }
+        refCallbacks.current.set(index, callback)
+      }
+      return callback
+    },
+    [itemHeight, handleMeasurements],
+  )
+
+  // 卸载时断开观察者并清空映射
+  useEffect(() => {
+    return () => {
+      observerRef.current?.disconnect()
+      observerRef.current = null
+      nodeOfIndex.current.clear()
+      indexOfNode.current.clear()
+    }
+  }, [])
+
   /** 二分查找第一个可见条目。 */
-  const items = useMemo(() => {
-    if (count === 0 || viewportHeight === 0) return []
+  const { items, firstVisible } = useMemo(() => {
+    if (count === 0 || viewportHeight === 0) return { items: [] as VirtualItem[], firstVisible: 0 }
     let low = 0
     let high = count - 1
     let first = 0
@@ -148,42 +290,8 @@ export function useVirtual(options: VirtualOptions): VirtualResult {
     for (let index = lastIndex + 1; index <= Math.min(count - 1, lastIndex + overscan); index += 1) {
       visible.push({ index, start: offsets[index], size: offsets[index + 1] - offsets[index] })
     }
-    return visible
+    return { items: visible, firstVisible: first }
   }, [count, offsets, scrollTop, viewportHeight, overscan])
-
-  /** 变高模式：测量真实高度并回填。 */
-  const measureRef = useCallback(
-    (index: number) => (node: HTMLElement | null) => {
-      if (typeof itemHeight === 'number' || typeof itemHeight === 'function' || !node) return
-      const existing = observers.current.get(index)
-      if (existing) {
-        existing.disconnect()
-        observers.current.delete(index)
-      }
-      const observer = new ResizeObserver((entries) => {
-        const height = entries[0]?.contentRect.height
-        if (height == null) return
-        setHeights((previous) => {
-          if (Math.abs((previous.get(index) ?? -1) - height) < 1) return previous
-          const next = new Map(previous)
-          next.set(index, height)
-          return next
-        })
-      })
-      observer.observe(node)
-      observers.current.set(index, observer)
-    },
-    [itemHeight],
-  )
-
-  // 卸载时断开所有观察者
-  useEffect(() => {
-    const map = observers.current
-    return () => {
-      map.forEach((observer) => observer.disconnect())
-      map.clear()
-    }
-  }, [])
 
   /** 滚动到指定条目（搜索结果跳转 / 定位）。 */
   const scrollToIndex = useCallback(
@@ -198,5 +306,5 @@ export function useVirtual(options: VirtualOptions): VirtualResult {
 
   const visibleEnd = items.length > 0 ? items[items.length - 1].index : 0
 
-  return { containerRef, totalSize, items, measureRef, scrollToIndex, visibleEnd }
+  return { containerRef, totalSize, items, measureRef, scrollToIndex, visibleEnd, visibleStart: firstVisible }
 }

@@ -10,6 +10,9 @@ import { resolve } from 'node:path'
 import puppeteer from 'puppeteer-core'
 
 const EDGE = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'
+const EDGE_ARGS = ['--no-first-run', '--no-default-browser-check', '--disable-extensions', '--hide-scrollbars']
+// 某些受限 Windows 沙箱会以 0xC0000022 阻止 Edge 子进程启动；仅在显式请求时关闭浏览器沙箱。
+if (process.env.AICHAT_EDGE_NO_SANDBOX === '1') EDGE_ARGS.push('--no-sandbox')
 const SECTIONS = ['type', 'icons', 'buttons', 'inputs', 'nav', 'rows', 'messages', 'feedback', 'cards']
 
 function parseArgs(argv) {
@@ -39,7 +42,7 @@ async function main() {
   const browser = await puppeteer.launch({
     executablePath: EDGE,
     headless: true,
-    args: ['--no-first-run', '--no-default-browser-check', '--disable-extensions', '--hide-scrollbars'],
+    args: EDGE_ARGS,
   })
 
   const written = []

@@ -22,6 +22,9 @@ import puppeteer from 'puppeteer-core'
 
 const EDGE = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'
 const NAV_LABEL = { conversations: '会话', search: '搜索', sync: '同步', settings: '设置' }
+const EDGE_ARGS = ['--no-first-run', '--no-default-browser-check', '--disable-extensions', '--hide-scrollbars']
+// 某些受限 Windows 沙箱会以 0xC0000022 阻止 Edge 子进程启动；仅在显式请求时关闭浏览器沙箱。
+if (process.env.AICHAT_EDGE_NO_SANDBOX === '1') EDGE_ARGS.push('--no-sandbox')
 
 /** 解析命令行参数。 */
 function parseArgs(argv) {
@@ -69,6 +72,8 @@ export const PAGE_MOCK = String.raw`
   const theme = __THEME__;
   const sessions = mock.sessions;
   const messages = mock.messages;
+  const windowState = { maximized: false, calls: [] };
+  window.__UI_QA_WINDOW_STATE__ = windowState;
 
   /** 会话筛选（与后端 SessionFilter 语义一致）。 */
   const byFilter = (filter) => {
@@ -171,12 +176,25 @@ export const PAGE_MOCK = String.raw`
     list_archives: () => (emptyState ? [] : mock.archives),
     restore_archive: () => 'D:/AIChatRepo/kimi/ses_0aa1',
     get_settings: () => Object.assign({}, mock.settings, { theme }),
-    save_settings: (a) => Object.assign({}, a.settings, { theme }),
+    save_settings: (a) => Object.assign({}, a.settings),
     data_dir: () => mock.dataDir,
     machine_id: () => mock.machineId,
+    'plugin:window|is_maximized': () => windowState.maximized,
+    'plugin:window|start_dragging': () => {
+      windowState.maximized = false;
+      windowState.calls.push('start_dragging');
+    },
+    'plugin:window|toggle_maximize': () => {
+      windowState.maximized = !windowState.maximized;
+      windowState.calls.push('toggle_maximize');
+    },
+    'plugin:window|minimize': () => { windowState.calls.push('minimize'); },
+    'plugin:window|close': () => { windowState.calls.push('close'); },
   };
 
   window.__TAURI_INTERNALS__ = {
+    // getCurrentWindow() 需要的元数据（自绘标题栏的窗口控制会读到）
+    metadata: { currentWindow: { label: 'main' }, currentWebview: { label: 'main', windowLabel: 'main' } },
     invoke: async (cmd, args) => {
       const handler = table[cmd];
       if (!handler) {
@@ -325,7 +343,7 @@ async function main() {
   const browser = await puppeteer.launch({
     executablePath: EDGE,
     headless: true,
-    args: ['--no-first-run', '--no-default-browser-check', '--disable-extensions', '--hide-scrollbars'],
+    args: EDGE_ARGS,
   })
 
   const written = []
@@ -402,8 +420,9 @@ async function main() {
             if (state === 'dirty') {
               // 设置未保存 → 切换到其他页面应被拦下
               await tab.evaluate(() => {
-                const box = document.querySelector('input[type="checkbox"]')
-                box?.click()
+                const toggle = document.querySelector('button[role="switch"]')
+                if (!toggle) throw new Error('设置页未找到 role="switch" 的开关')
+                toggle.click()
               })
               await new Promise((r) => setTimeout(r, 300))
               await tab.evaluate(() => {

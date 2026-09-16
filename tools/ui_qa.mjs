@@ -19,6 +19,9 @@ import puppeteer from 'puppeteer-core'
 import { injectionFor as baseInjection } from './ui_shot.mjs'
 
 const EDGE = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'
+const EDGE_ARGS = ['--no-first-run', '--no-default-browser-check', '--hide-scrollbars']
+// 某些受限 Windows 沙箱会以 0xC0000022 阻止 Edge 子进程启动；仅在显式请求时关闭浏览器沙箱。
+if (process.env.AICHAT_EDGE_NO_SANDBOX === '1') EDGE_ARGS.push('--no-sandbox')
 
 /** 参数解析。 */
 function parseArgs(argv) {
@@ -82,8 +85,9 @@ const KEYBOARD_AUDIT = (steps) => {
 const LAYOUT_AUDIT = () => {
   const root = document.documentElement
   const overflow = root.scrollWidth - root.clientWidth
-  // 阅读区（含背景 reading 的滚动容器）内部不应再有可滚动元素
-  const reader = document.querySelector('.overflow-y-auto.bg-reading')
+  // 阅读区使用稳定的语义标记，避免视觉类名调整后断言静默失效。
+  const reader = document.querySelector('[data-scroll-region="conversation-reader"]')
+  const readerExpected = Boolean(document.querySelector('.reading-panel'))
   let innerScrollers = 0
   if (reader) {
     for (const node of reader.querySelectorAll('*')) {
@@ -111,7 +115,15 @@ const LAYOUT_AUDIT = () => {
     }
   }
   offenders.sort((a, b) => b.right - a.right)
-  return { overflow, innerScrollers, sessionRows, rendered, offenders: offenders.slice(0, 5) }
+  return {
+    overflow,
+    readerExpected,
+    readerFound: Boolean(reader),
+    innerScrollers,
+    sessionRows,
+    rendered,
+    offenders: offenders.slice(0, 5),
+  }
 }
 
 async function main() {
@@ -124,7 +136,7 @@ async function main() {
   const browser = await puppeteer.launch({
     executablePath: EDGE,
     headless: true,
-    args: ['--no-first-run', '--no-default-browser-check', '--hide-scrollbars'],
+    args: EDGE_ARGS,
   })
 
   const failures = []
@@ -144,6 +156,9 @@ async function main() {
         const layout = await tab.evaluate(LAYOUT_AUDIT)
         if (layout.overflow > 1) {
           failures.push(`[${size}/${theme}] 页面出现横向溢出：${layout.overflow}px`)
+        }
+        if (layout.readerExpected && !layout.readerFound) {
+          failures.push(`[${size}/${theme}] 未找到会话阅读区，嵌套滚动断言未执行`)
         }
         if (layout.innerScrollers > 0) {
           failures.push(`[${size}/${theme}] 阅读区出现嵌套滚动容器：${layout.innerScrollers} 个`)
@@ -199,6 +214,107 @@ async function main() {
       failures.push(`[bulk] DOM 节点过多：${bulk.rendered}`)
     }
     await bulkTab.close()
+
+    // 5) 设置交互回归：窗口最大化拖动、下拉尺寸/裁切、主题即时预览。
+    const settingsTab = await browser.newPage()
+    await settingsTab.setViewport({ width: 1180, height: 800 })
+    await settingsTab.evaluateOnNewDocument(injectionFor(mock, 'normal', 'dark'))
+    await settingsTab.goto(args.url, { waitUntil: 'networkidle2', timeout: 60000 })
+    await settingsTab.waitForSelector('header', { timeout: 20000 })
+    await settingsTab.evaluate(() => {
+      const settingsButton = [...document.querySelectorAll('button')].find(
+        (button) => button.textContent?.trim() === '设置',
+      )
+      settingsButton?.click()
+    })
+    await settingsTab.waitForFunction(
+      () => [...document.querySelectorAll('label')].some((label) => label.textContent?.trim() === '主题'),
+      { timeout: 10000 },
+    )
+
+    const controls = await settingsTab.evaluate(() => {
+      const label = [...document.querySelectorAll('label')].find(
+        (node) => node.textContent?.trim() === '主题',
+      )
+      const trigger = label?.htmlFor ? document.getElementById(label.htmlFor) : null
+      const rect = trigger?.getBoundingClientRect()
+      return { triggerHeight: rect?.height ?? 0, triggerId: label?.htmlFor ?? '' }
+    })
+    notes.push(`[设置] 主题下拉触发器高度 ${controls.triggerHeight}px`)
+    if (controls.triggerHeight < 36) {
+      failures.push(`[设置] 主题下拉触发器过矮：${controls.triggerHeight}px（至少应为 36px）`)
+    }
+
+    await settingsTab.evaluate((triggerId) => {
+      const trigger = document.getElementById(triggerId)
+      trigger?.scrollIntoView({ block: 'center' })
+      trigger?.click()
+    }, controls.triggerId)
+    await settingsTab.waitForSelector('[role="listbox"]', { timeout: 5000 })
+    const popup = await settingsTab.evaluate(() => {
+      const listbox = document.querySelector('[role="listbox"]')
+      if (!(listbox instanceof HTMLElement)) return { clipped: true, optionHeight: 0 }
+      const listRect = listbox.getBoundingClientRect()
+      const optionRect = listbox.querySelector('[role="option"]')?.getBoundingClientRect()
+      let parent = listbox.parentElement
+      let clipped = false
+      while (parent) {
+        const style = getComputedStyle(parent)
+        if (['hidden', 'clip', 'auto', 'scroll'].includes(style.overflowY)) {
+          const parentRect = parent.getBoundingClientRect()
+          if (listRect.bottom > parentRect.bottom + 1 || listRect.top < parentRect.top - 1) {
+            clipped = true
+            break
+          }
+        }
+        parent = parent.parentElement
+      }
+      return { clipped, optionHeight: optionRect?.height ?? 0 }
+    })
+    notes.push(`[设置] 下拉选项高度 ${popup.optionHeight}px，裁切=${popup.clipped}`)
+    if (popup.clipped) failures.push('[设置] 主题下拉浮层被祖先容器裁切')
+    if (popup.optionHeight < 36) {
+      failures.push(`[设置] 下拉选项过矮：${popup.optionHeight}px（至少应为 36px）`)
+    }
+
+    await settingsTab.evaluate(() => {
+      const light = [...document.querySelectorAll('[role="option"]')].find(
+        (option) => option.textContent?.trim() === '浅色',
+      )
+      light?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    const darkAfterLightChoice = await settingsTab.evaluate(() =>
+      document.documentElement.classList.contains('dark'),
+    )
+    if (darkAfterLightChoice) failures.push('[设置] 选择“浅色”后未立即预览主题')
+
+    await settingsTab.evaluate(() => {
+      const reset = [...document.querySelectorAll('button')].find(
+        (button) => button.textContent?.trim() === '还原',
+      )
+      reset?.click()
+    })
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    const darkAfterReset = await settingsTab.evaluate(() =>
+      document.documentElement.classList.contains('dark'),
+    )
+    if (!darkAfterReset) failures.push('[设置] 点击“还原”后没有恢复已保存主题')
+
+    await settingsTab.evaluate(() => {
+      const state = window.__UI_QA_WINDOW_STATE__
+      state.maximized = true
+      state.calls.length = 0
+      document.querySelector('.app-header')?.dispatchEvent(
+        new MouseEvent('mousedown', { bubbles: true, button: 0, detail: 1 }),
+      )
+    })
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    const dragCalls = await settingsTab.evaluate(() => window.__UI_QA_WINDOW_STATE__.calls)
+    if (!dragCalls.includes('start_dragging')) {
+      failures.push('[窗口] 最大化状态按住标题栏没有发起窗口拖动')
+    }
+    await settingsTab.close()
   } finally {
     await browser.close()
   }
