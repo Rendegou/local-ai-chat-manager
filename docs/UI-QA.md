@@ -56,6 +56,20 @@ npm run ui:shots -- --out .ui-shots/phase4 --states normal,empty,conflict
 | 焦点可达 | Tab 20 步内每个焦点元素都有可访问名称且可见 | 键盘用户不该掉进「看不见的焦点」 |
 | 大列表虚拟化 | 2000 个会话时渲染行数 ≤ 60、DOM 节点 ≤ 4000 | 防止有人把虚拟列表改回全量渲染 |
 
+会话行的选择器是 `button[data-row="session"]`（改 SessionRow 结构时保持这个钩子）。
+
+## 组件画廊（组件级重设计的验收工具）
+
+`tools/gallery_shot.mjs` 按「区块 × 主题」截取 `?gallery` 页面：
+
+```bash
+npm run dev            # 另开一个终端
+node tools/gallery_shot.mjs --out .ui-shots/gallery
+```
+
+区块清单在脚本的 `SECTIONS` 里；表单控件区块会额外拍一张下拉展开态（`inputs-open-*.png`）。
+规则：**组件先在画廊里过关（全状态、深浅双主题），才允许进页面。**
+
 对比度审计（`npm run ui:a11y`）用 1×1 canvas 把 `oklch()` 等现代颜色转成 sRGB 后再算对比度 ——
 直接解析字符串会把 `oklch(0.2 0.005 265)` 当成 rgb 读，得出完全错误的结论。
 

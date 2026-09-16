@@ -296,7 +296,7 @@ export function SearchPage() {
             description={`FTS5 查询：${response.matchQuery}。可尝试减少关键词或放宽筛选条件。`}
           />
         ) : null}
-        <div className="mx-auto w-full max-w-[920px]">
+        <div className="mx-auto w-full max-w-[920px] px-2 py-2">
           {response?.hits.map((hit) => (
             <button
               key={hit.messageId}
@@ -305,23 +305,30 @@ export function SearchPage() {
                 setPage('conversations')
                 void selectSession(hit.sessionId)
               }}
-              className="block w-full border-b border-line/60 px-4 py-2.5 text-left transition-colors hover:bg-hover"
+              className="block w-full rounded-control px-3 py-2.5 text-left transition-colors hover:bg-hover"
             >
-              <div className="flex min-w-0 items-center gap-2 text-meta text-ink-muted">
-                <StatusPill tone={hit.source === 'kimi' ? 'kimi' : 'codex'}>
+              {/* 第一行：来源 + 会话标题 + 时间（项目路径降到第三行，不再与标题抢宽度） */}
+              <div className="flex min-w-0 items-center gap-2">
+                <StatusPill size="sm" tone={hit.source === 'kimi' ? 'kimi' : 'codex'}>
                   {sourceLabel(hit.source)}
                 </StatusPill>
-                <span className="min-w-0 flex-1 truncate text-ink">{hit.projectPath ?? '未知项目'}</span>
-                <span className="min-w-0 flex-1 truncate">{hit.title ?? hit.sessionId}</span>
-                <span className="ml-auto shrink-0">{formatRelative(hit.sessionUpdatedAt)}</span>
+                <span className="min-w-0 flex-1 truncate text-body font-medium text-ink">
+                  {hit.title ?? hit.sessionId}
+                </span>
+                <span className="shrink-0 text-meta tabular-nums text-ink-muted">
+                  {formatRelative(hit.sessionUpdatedAt)}
+                </span>
               </div>
               {/* snippet 为后端生成的高亮片段（含 <mark>） */}
               <div
-                className="pt-1 text-body leading-6 text-ink [&_mark]:rounded [&_mark]:bg-warning/30"
+                className="pt-1 text-body leading-6 text-ink-muted [&_mark]:rounded [&_mark]:bg-warning/30 [&_mark]:text-ink"
                 dangerouslySetInnerHTML={{ __html: escapeExceptMark(hit.snippet) }}
               />
-              <div className="pt-0.5 text-tech text-ink-muted">
-                {hit.role} · #{hit.sequence} · {formatDateTime(hit.timestamp)}
+              <div className="flex min-w-0 items-center gap-1.5 pt-1 text-meta text-ink-faint">
+                <span className="min-w-0 flex-1 truncate">{hit.projectPath ?? '未知项目'}</span>
+                <span className="shrink-0 text-tech">
+                  {hit.role} · #{hit.sequence} · {formatDateTime(hit.timestamp)}
+                </span>
               </div>
             </button>
           ))}

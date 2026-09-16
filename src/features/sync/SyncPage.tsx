@@ -23,6 +23,7 @@ import {
   Field,
   Icon,
   IconButton,
+  ListRow,
   Notice,
   PanelHeader,
   SectionCard,
@@ -38,6 +39,7 @@ export function SyncPage() {
     archives,
     running,
     progress,
+    error,
     refresh,
     run,
     abortRebase,
@@ -154,6 +156,13 @@ export function SyncPage() {
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         <div className="mx-auto flex w-full max-w-[860px] flex-col gap-3">
+          {/* 同步执行/刷新失败：此前静默不可见，失败反馈必须持续到用户看到 */}
+          {error ? (
+            <Notice tone="danger" title={error.message}>
+              {error.detail ?? error.kind}
+            </Notice>
+          ) : null}
+
           {/* 冲突：可靠性样板，永远排在最前面 */}
           {conflict ? (
             <Notice
@@ -303,16 +312,21 @@ export function SyncPage() {
               {report ? (
                 <SectionCard title="上一次同步结果" description={`耗时 ${report.durationMs} ms`}>
                   {report.steps.map((step) => (
-                    <div key={step.name} className="flex items-center gap-2 py-0.5 text-meta">
-                      <StatusPill tone={step.ok ? 'success' : 'danger'}>
-                        {step.ok ? '完成' : '失败'}
-                      </StatusPill>
-                      <span className="w-32 shrink-0 text-ink-muted">{step.name}</span>
-                      <span className="min-w-0 flex-1 truncate text-ink">{step.detail}</span>
-                      <span className="shrink-0 tabular-nums text-ink-muted">
-                        {step.durationMs} ms
-                      </span>
-                    </div>
+                    <ListRow
+                      key={step.name}
+                      leading={
+                        <StatusPill size="sm" tone={step.ok ? 'success' : 'danger'}>
+                          {step.ok ? '完成' : '失败'}
+                        </StatusPill>
+                      }
+                      title={step.name}
+                      subtitle={step.detail}
+                      trailing={
+                        <span className="text-meta tabular-nums text-ink-muted">
+                          {step.durationMs} ms
+                        </span>
+                      }
+                    />
                   ))}
                 </SectionCard>
               ) : null}
@@ -346,22 +360,21 @@ export function SyncPage() {
                       ) : (
                         <div className="max-h-48 overflow-y-auto">
                           {archives.map((entry) => (
-                            <div key={entry.relPath} className="flex items-center gap-2 py-1 text-body">
-                              <StatusPill tone="neutral">{entry.compression}</StatusPill>
-                              <span className="min-w-0 flex-1 truncate text-ink">
-                                {entry.title ?? entry.sessionId}
-                              </span>
-                              <span className="ml-auto shrink-0 text-meta text-ink-muted">
-                                {formatBytes(entry.sizeBytes)} · {formatRelative(entry.createdAt)}
-                              </span>
-                              <Button
-                                tone="ghost"
-                                size="sm"
-                                onClick={() => void restore(entry.relPath)}
-                              >
-                                恢复
-                              </Button>
-                            </div>
+                            <ListRow
+                              key={entry.relPath}
+                              leading={<StatusPill size="sm" tone="neutral">{entry.compression}</StatusPill>}
+                              title={entry.title ?? entry.sessionId}
+                              trailing={
+                                <>
+                                  <span className="text-meta tabular-nums text-ink-muted">
+                                    {formatBytes(entry.sizeBytes)} · {formatRelative(entry.createdAt)}
+                                  </span>
+                                  <Button tone="ghost" size="sm" onClick={() => void restore(entry.relPath)}>
+                                    恢复
+                                  </Button>
+                                </>
+                              }
+                            />
                           ))}
                         </div>
                       )}

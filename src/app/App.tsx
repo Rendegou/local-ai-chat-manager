@@ -31,6 +31,7 @@ import {
 } from '../components/ui'
 import { describeFilter, formatRelative } from '../lib/format'
 import { useMinWidth } from '../hooks/useMediaQuery'
+import appIcon from '../assets/app-icon.png'
 
 /** 导航项。 */
 const NAV: Array<{ key: PageKey; label: string; hint: string }> = [
@@ -113,9 +114,10 @@ export default function App() {
       {/* 极端缩放（200%）下工具栏允许换行：宁可占两行，也不要整页横向滚动 */}
       <header className="flex min-h-13 shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-panel px-3.5 py-2">
         {/* 左：品牌 + 资料库摘要 */}
-        <div className="flex min-w-0 items-baseline gap-2.5">
+        <div className="flex min-w-0 items-center gap-2">
+          <img src={appIcon} alt="" className="h-5 w-5 rounded-[5px]" />
           <span className="text-title text-ink">Local Chats</span>
-          <span className="min-w-0 truncate text-meta text-ink-muted">
+          <span className="min-w-0 truncate pl-0.5 text-meta text-ink-muted">
             {stats ? `${stats.sessions} 会话 · ${stats.messages} 消息` : '索引未就绪'}
           </span>
         </div>

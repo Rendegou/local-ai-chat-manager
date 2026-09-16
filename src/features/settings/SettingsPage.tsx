@@ -12,6 +12,7 @@ import * as ipc from '../../lib/ipc'
 import { useLibrary } from '../../stores/library'
 import {
   Button,
+  DirectoryInput,
   Field,
   FormField,
   Notice,
@@ -123,28 +124,24 @@ export function SettingsPage() {
           >
             <FormField label="Codex 目录" hint="手工指定后只扫描该目录，不再自动发现其他位置">
               {(props) => (
-                <div className="flex gap-2">
-                  <TextInput
-                    {...props}
-                    value={draft.codexPath ?? ''}
-                    onChange={(event) => patch({ codexPath: event.target.value || null })}
-                    placeholder="C:\Users\you\.codex"
-                  />
-                  <Button onClick={() => void pickDirectory('codexPath')}>选择</Button>
-                </div>
+                <DirectoryInput
+                  {...props}
+                  value={draft.codexPath ?? ''}
+                  onChange={(value) => patch({ codexPath: value || null })}
+                  placeholder="C:\Users\you\.codex"
+                  onBrowse={() => void pickDirectory('codexPath')}
+                />
               )}
             </FormField>
             <FormField label="KimiCode 目录" hint="通常是 ~/.kimi-code">
               {(props) => (
-                <div className="flex gap-2">
-                  <TextInput
-                    {...props}
-                    value={draft.kimiPath ?? ''}
-                    onChange={(event) => patch({ kimiPath: event.target.value || null })}
-                    placeholder="C:\Users\you\.kimi-code"
-                  />
-                  <Button onClick={() => void pickDirectory('kimiPath')}>选择</Button>
-                </div>
+                <DirectoryInput
+                  {...props}
+                  value={draft.kimiPath ?? ''}
+                  onChange={(value) => patch({ kimiPath: value || null })}
+                  placeholder="C:\Users\you\.kimi-code"
+                  onBrowse={() => void pickDirectory('kimiPath')}
+                />
               )}
             </FormField>
           </SectionCard>
@@ -156,15 +153,13 @@ export function SettingsPage() {
           >
             <FormField label="仓库目录">
               {(props) => (
-                <div className="flex gap-2">
-                  <TextInput
-                    {...props}
-                    value={draft.syncRepo ?? ''}
-                    onChange={(event) => patch({ syncRepo: event.target.value || null })}
-                    placeholder="D:\AIChatRepo"
-                  />
-                  <Button onClick={() => void pickDirectory('syncRepo')}>选择</Button>
-                </div>
+                <DirectoryInput
+                  {...props}
+                  value={draft.syncRepo ?? ''}
+                  onChange={(value) => patch({ syncRepo: value || null })}
+                  placeholder="D:\AIChatRepo"
+                  onBrowse={() => void pickDirectory('syncRepo')}
+                />
               )}
             </FormField>
             <FormField label="远端地址" hint="支持 GitHub / GitLab / Gitea / 自建 Git">

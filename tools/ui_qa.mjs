@@ -93,9 +93,7 @@ const LAYOUT_AUDIT = () => {
       }
     }
   }
-  const sessionRows = [...document.querySelectorAll('button')].filter((b) =>
-    (b.className || '').includes('h-[56px]'),
-  ).length
+  const sessionRows = document.querySelectorAll('button[data-row="session"]').length
   const rendered = document.querySelectorAll('*').length
   // 诊断：找出横向越界的元素（最多 5 个），便于定位溢出真因
   const limit = window.innerWidth

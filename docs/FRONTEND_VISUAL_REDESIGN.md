@@ -1,8 +1,8 @@
 # Local AI Chat Manager 前端视觉重构方案
 
-> 状态：提案 v1  
-> 目标：保留产品功能、信息架构和数据模型，重构视觉语言、页面层级与交互表达。  
-> 适用范围：`src/app`、`src/components`、`src/features` 与 `src/index.css`。
+> 状态：v2 已落地（组件级重设计，2026-09-16）  
+> v1（本文档 §1–§11）完成了 token 与页面层级；v2 在其基础上把**每个组件当作物件重新设计**，见文末 §12。  
+> 适用范围：`src/app`、`src/components`、`src/features`、`src/gallery` 与 `src/index.css`。
 
 ## 1. 结论先行
 
@@ -362,3 +362,27 @@
 - 用新的设计系统和页面层级，把现有功能从“调试工具”提升为“可信的本地会话档案工作台”。
 
 这条路线能解决当前大部分“丑”的根因，同时把功能风险控制在表现层范围内。
+
+## 12. v2：组件级重设计（2026-09-16 落地）
+
+v1 换的是「皮」（token/色板/层级），组件本身的造型没有被设计过：原生 `<select>` 直接出镜、
+按钮是描边圆角矩形、看得最多的会话行和消息块最平庸。v2 改为**组件设计先行**：
+
+**机制**：`?gallery` 组件画廊（`src/gallery/Gallery.tsx`）陈列每个组件的全部状态与深浅主题，
+`tools/gallery_shot.mjs` 逐区块截图。组件在画廊过关后才进页面。
+
+**材料**：
+- 字体本地打包：拉丁 Geist / 等宽 Geist Mono（变量字重，woff2 进产物，Tauri 离线可用），
+  CJK 回落系统栈；类型层级改为「字号 × 字重 × 字距」三者分层；
+- 控件皮肤统一为 `.field`：内陷表面 + inset ring（比 border 锐利、不撑布局）+ 顶内阴影，
+  hover/focus/invalid 只改 ring 颜色；
+- 圆角收敛为三档：控件 6 / 面板 8 / 浮层 12。
+
+**组件结论**：
+- `Select` 自绘（触发器 + 浮层 + 选中对勾 + 完整键盘导航），原生 select/date/checkbox 不再出镜；
+- `Toggle` 为真正的拨杆开关（`role="switch"`）；
+- `Button` 四语气：primary 渐变浮起、secondary inset ring + 轻投影、danger 实体淡染；
+- `SessionRow` 是圆角物件（容器内缩、选中 = 填充 + inset 强调条、徽标微型化），列表不再有连续 hairline；
+- 工具调用/结果是带头栏的终端块（工具名 + 折叠 chevron + hover 复制），默认仍展开；
+- `StatusPill`/`Notice` 无边框淡染，图标承担色觉冗余；
+- 新增 `SidebarRow`/`SectionLabel`/`ListRow`/`Chip`/`DirectoryInput`/`Drawer`，页面里的手写重复模式收敛进 `ui/`。
