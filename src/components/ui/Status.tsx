@@ -24,16 +24,16 @@ const TONE_TEXT: Record<Tone, string> = {
   kimi: 'text-kimi',
 }
 
-/** 语气 → 边框/底色类名。 */
+/** 语气 → 底色（无描边，淡染承载语义；图标负责色觉冗余）。 */
 const TONE_SURFACE: Record<Tone, string> = {
-  neutral: 'border-line bg-canvas/40',
-  accent: 'border-accent/35 bg-accent/10',
-  success: 'border-success/40 bg-success/10',
-  warning: 'border-warning/40 bg-warning/10',
-  danger: 'border-danger/40 bg-danger/10',
-  info: 'border-info/35 bg-info/10',
-  codex: 'border-codex/30 bg-codex/10',
-  kimi: 'border-kimi/30 bg-kimi/10',
+  neutral: 'bg-hover',
+  accent: 'bg-accent/12',
+  success: 'bg-success/12',
+  warning: 'bg-warning/14',
+  danger: 'bg-danger/12',
+  info: 'bg-info/12',
+  codex: 'bg-codex/10',
+  kimi: 'bg-kimi/10',
 }
 
 /** 语义语气 → 图标（非颜色的冗余表达）。 */
@@ -56,25 +56,31 @@ const TONE_DOT: Partial<Record<Tone, 'neutral' | 'accent' | 'codex' | 'kimi'>> =
 function ToneMark({ tone, size = 11 }: { tone: Tone; size?: number }) {
   const icon = TONE_ICON[tone]
   if (icon) return <Icon name={icon} size={size} className={TONE_TEXT[tone]} />
-  return <Dot tone={TONE_DOT[tone] ?? 'neutral'} />
+  // sm 尺寸下色点也缩小一号，保持与文字的比例
+  return <Dot tone={TONE_DOT[tone] ?? 'neutral'} className={size <= 9 ? 'h-1 w-1' : ''} />
 }
 
 /** 状态胶囊：数据源、同步状态、解析状态、归档状态等统一使用它。 */
 export function StatusPill({
   tone = 'neutral',
+  size = 'md',
   children,
   title,
 }: {
   tone?: Tone
+  /** sm：列表行内的微型徽标；md：默认 */
+  size?: 'sm' | 'md'
   children: ReactNode
   title?: string
 }) {
+  const box =
+    size === 'sm' ? 'gap-1 px-1.5 py-px text-micro leading-4' : 'gap-1.5 px-2 py-0.5 text-meta leading-5'
   return (
     <span
       title={title}
-      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-meta leading-5 ${TONE_SURFACE[tone]}`}
+      className={`inline-flex shrink-0 items-center rounded-control font-medium ${box} ${TONE_SURFACE[tone]}`}
     >
-      <ToneMark tone={tone} />
+      <ToneMark tone={tone} size={size === 'sm' ? 9 : 11} />
       <span className="text-ink">{children}</span>
     </span>
   )
@@ -102,7 +108,7 @@ export function Notice({
   return (
     <div
       role={role}
-      className={`flex items-start gap-2.5 rounded-panel border px-3 py-2.5 ${TONE_SURFACE[tone]} ${className}`}
+      className={`flex items-start gap-2.5 rounded-panel px-3 py-2.5 ${TONE_SURFACE[tone]} ${className}`}
     >
       <span className={`pt-1 ${TONE_TEXT[tone]}`}>
         <ToneMark tone={tone} size={13} />

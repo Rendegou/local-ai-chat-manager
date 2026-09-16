@@ -13,7 +13,8 @@ export {
   Chip,
   type Tone,
 } from './Status'
-export { PanelHeader, SectionCard, FormField, Field, EmptyState } from './Surfaces'
+export { PanelHeader, SectionCard, FormField, Field, EmptyState, Drawer } from './Surfaces'
+export { SectionLabel, SidebarRow, ListRow } from './Rows'
 export { TextInput, DateInput, Select, Toggle, DirectoryInput, type SelectOption } from './Inputs'
 export { Menu, SegmentedNav, StatusArea, type MenuItem } from './Menu'
 export { Icon, Dot, type IconName } from './Icon'

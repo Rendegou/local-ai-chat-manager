@@ -14,7 +14,7 @@ import { formatDateTime, kindLabel, roleLabel, sourceLabel, syncStatusLabel } fr
 import { useVirtual } from '../../hooks/useVirtual'
 import { useLibrary } from '../../stores/library'
 import type { MessageRow } from '../../types/ipc'
-import { Button, Dot, EmptyState, PanelHeader, Skeleton, StatusPill } from '../../components/ui'
+import { Button, Dot, EmptyState, Icon, IconButton, PanelHeader, Skeleton, StatusPill } from '../../components/ui'
 
 /** 每次分页拉取的消息条数。 */
 const PAGE_SIZE = 200
@@ -203,11 +203,16 @@ export function ConversationViewer() {
  * - user：染色实体卡（msg-user），「人说的话」一眼可辨；
  * - assistant：开放正文，阅读主轴，无容器装饰，行高放宽到 1.75；
  * - reasoning：引文细线 + 斜体次要语气；
- * - tool_call / tool_result：内陷终端块（msg-term，等宽、更深表面）；
+ * - tool_call / tool_result：内陷终端块（msg-term）——带头栏（工具名 / 类型 / 折叠），
+ *   默认展开（不改变既有默认行为），点击头栏可折叠单块；
  * - event：弱化单行，不占消息卡高度。
+ *
+ * 每条消息头栏右置 hover 出现的「复制内容」按钮（键盘聚焦时同样可见）。
  */
 function MessageBlock({ message }: { message: MessageRow }) {
   const [expanded, setExpanded] = useState(false)
+  const [collapsed, setCollapsed] = useState(false)
+  const [copied, setCopied] = useState(false)
   const text = message.text ?? ''
   const isLong = text.length > COLLAPSE_THRESHOLD
   const shown = isLong && !expanded ? text.slice(0, COLLAPSE_THRESHOLD) : text
@@ -216,6 +221,24 @@ function MessageBlock({ message }: { message: MessageRow }) {
   const isTool = isToolCall || message.kind === 'tool_result'
   const isUser = message.role === 'user' && message.kind === 'message'
   const isReasoning = message.kind === 'reasoning_summary'
+
+  const copyText = () => {
+    void navigator.clipboard?.writeText(text).then(() => {
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1200)
+    })
+  }
+
+  const copyButton = text ? (
+    <IconButton
+      label={copied ? '已复制' : '复制内容'}
+      size="sm"
+      onClick={copyText}
+      className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+    >
+      <Icon name={copied ? 'check' : 'copy'} size={12} />
+    </IconButton>
+  ) : null
 
   // 事件：一行弱字 + 色点，不进入消息节奏
   if (message.kind === 'event') {
@@ -230,53 +253,81 @@ function MessageBlock({ message }: { message: MessageRow }) {
     )
   }
 
-  const container = isUser
-    ? 'msg-user my-3 px-3.5 py-2.5'
-    : isTool
-      ? 'msg-term my-2.5 px-3 py-2'
-      : isReasoning
-        ? 'msg-reason my-3 py-0.5'
-        : 'my-3.5'
-
   // `[overflow-wrap:anywhere]` 而不是 `break-words`：
   // 前者会参与固有最小宽度计算，长路径 / 长 JSON 才不会把整个阅读区撑宽（200% 缩放时尤其明显）
   const bodyClass = isTool
-    ? 'pt-1 font-mono text-meta leading-[1.65] text-ink whitespace-pre-wrap [overflow-wrap:anywhere]'
+    ? 'px-3 py-2 font-mono text-meta leading-[1.65] text-ink whitespace-pre-wrap [overflow-wrap:anywhere]'
     : isReasoning
       ? 'pt-0.5 text-meta italic leading-6 text-ink-muted whitespace-pre-wrap [overflow-wrap:anywhere]'
       : 'pt-1 text-body leading-[1.75] text-ink whitespace-pre-wrap [overflow-wrap:anywhere]'
 
-  return (
-    <article className={container}>
-      <header className="msg-head">
-        {isTool ? (
-          <>
+  // 工具块：头栏（折叠开关）+ 等宽内容区
+  if (isTool) {
+    return (
+      <article className="msg-term group my-2.5">
+        <div className={`flex items-center gap-1 pr-1.5 ${collapsed ? '' : 'border-b border-line/50'}`}>
+          <button
+            type="button"
+            aria-expanded={!collapsed}
+            onClick={() => setCollapsed((value) => !value)}
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-t-[inherit] px-3 py-1.5 text-left transition-colors hover:bg-hover/60"
+          >
             <span aria-hidden="true" className="font-mono text-meta leading-none text-accent">
               {isToolCall ? '$' : '↵'}
             </span>
             {message.toolName ? (
-              <span className="font-mono text-meta text-ink">{message.toolName}</span>
+              <span className="truncate font-mono text-meta font-medium text-ink">
+                {message.toolName}
+              </span>
             ) : null}
-            <span className="text-ink-muted">{kindLabel(message.kind)}</span>
-          </>
+            <span className="shrink-0 text-meta text-ink-muted">{kindLabel(message.kind)}</span>
+            <Icon
+              name="chevron"
+              size={11}
+              className={`shrink-0 text-ink-faint transition-transform ${collapsed ? '-rotate-90' : ''}`}
+            />
+            <MsgTime message={message} />
+          </button>
+          {copyButton}
+        </div>
+        {collapsed ? null : text ? (
+          <pre className={bodyClass}>{shown}</pre>
         ) : (
-          <>
-            <span
-              className={
-                isUser
-                  ? 'font-semibold text-accent'
-                  : isReasoning
-                    ? 'text-ink-faint'
-                    : 'font-medium text-ink'
-              }
-            >
-              {isReasoning ? kindLabel(message.kind) : roleLabel(message.role)}
-            </span>
-            {!isReasoning && message.kind !== 'message' ? (
-              <span className="text-ink-muted">{kindLabel(message.kind)}</span>
-            ) : null}
-          </>
+          <div className="px-3 py-2 text-meta text-ink-muted">（无文本内容）</div>
         )}
+        {!collapsed && isLong ? (
+          <button
+            type="button"
+            onClick={() => setExpanded((value) => !value)}
+            className="mx-3 mb-2 text-meta text-accent hover:underline"
+          >
+            {expanded ? '收起' : `展开全部（${text.length} 字符）`}
+          </button>
+        ) : null}
+      </article>
+    )
+  }
+
+  const container = isUser ? 'msg-user my-3 px-3.5 py-2.5' : isReasoning ? 'msg-reason my-3 py-0.5' : 'my-3.5'
+
+  return (
+    <article className={`group ${container}`}>
+      <header className="msg-head">
+        <span
+          className={
+            isUser
+              ? 'font-semibold text-accent'
+              : isReasoning
+                ? 'text-ink-faint'
+                : 'font-medium text-ink'
+          }
+        >
+          {isReasoning ? kindLabel(message.kind) : roleLabel(message.role)}
+        </span>
+        {!isReasoning && message.kind !== 'message' ? (
+          <span className="text-ink-muted">{kindLabel(message.kind)}</span>
+        ) : null}
+        {copyButton}
         <MsgTime message={message} />
       </header>
       {text ? (

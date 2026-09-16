@@ -5,6 +5,9 @@
  */
 import { useId, type ReactNode } from 'react'
 
+import { IconButton } from './Button'
+import { Icon } from './Icon'
+
 /**
  * 面板标题栏：分层标题（主标题 + 元数据）+ 操作槽。
  *
@@ -68,10 +71,10 @@ export function SectionCard({
   children: ReactNode
   className?: string
 }) {
-  // 默认卡：投影 + 顶内高光声明 elevation，不再加描边；danger 卡用语义描边 + 淡染
+  // 默认卡：投影 + 顶内高光声明 elevation，不再加描边；danger 卡用语义 inset ring + 淡染
   const skin =
     tone === 'danger'
-      ? 'border border-danger/40 bg-danger/5'
+      ? 'bg-danger/6 shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--semantic-danger)_35%,transparent)]'
       : 'bg-panel shadow-panel'
   return (
     <section className={`rounded-panel ${skin} ${className}`}>
@@ -179,18 +182,22 @@ export function EmptyState({
   description,
   primaryAction,
   secondaryAction,
+  icon,
   className = '',
 }: {
   title: string
   description?: ReactNode
   primaryAction?: ReactNode
   secondaryAction?: ReactNode
+  /** 标题上方的弱化图标（传递场景感，不承担语义） */
+  icon?: ReactNode
   className?: string
 }) {
   return (
     <div
       className={`flex h-full flex-col items-center justify-center gap-2.5 px-8 text-center ${className}`}
     >
+      {icon ? <div className="pb-1 text-ink-faint">{icon}</div> : null}
       <div className="text-lead text-ink">{title}</div>
       {description ? (
         <div className="max-w-md text-body leading-6 text-ink-muted">{description}</div>
@@ -202,5 +209,45 @@ export function EmptyState({
         </div>
       ) : null}
     </div>
+  )
+}
+
+/**
+ * 抽屉：窄窗口下来源/筛选面板的承载（规格 §5.2）。
+ *
+ * 结构 = 遮罩（点击关闭）+ 面板（标题 + 关闭按钮 + 内容槽）；
+ * 浮层用 overlay 表面 + 阴影 + animate-pop 入场。
+ */
+export function Drawer({
+  title,
+  onClose,
+  widthClass = 'w-[240px]',
+  children,
+}: {
+  title: string
+  onClose: () => void
+  widthClass?: string
+  children: ReactNode
+}) {
+  return (
+    <>
+      <button
+        type="button"
+        aria-label={`关闭${title}`}
+        onClick={onClose}
+        className="absolute inset-0 z-20 bg-canvas/60"
+      />
+      <aside
+        className={`relative z-30 flex ${widthClass} shrink-0 animate-pop flex-col overflow-hidden border-r border-line bg-panel shadow-overlay`}
+      >
+        <div className="flex items-center justify-between border-b border-line px-3 py-2">
+          <span className="text-lead text-ink">{title}</span>
+          <IconButton label={`关闭${title}`} size="sm" onClick={onClose}>
+            <Icon name="close" />
+          </IconButton>
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col">{children}</div>
+      </aside>
+    </>
   )
 }

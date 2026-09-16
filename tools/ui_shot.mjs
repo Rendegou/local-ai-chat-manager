@@ -371,10 +371,8 @@ async function main() {
             if (state === 'detail') {
               // 两级视图：点第一条会话，验证「列表 → 详情 → 返回」
               await tab.evaluate(() => {
-                // 会话行是列表里唯一的固定行高按钮（不依赖是否已选中）
-                const row = [...document.querySelectorAll('button')]
-                  .find((b) => (b.className || '').includes('h-[56px]'))
-                row?.click()
+                const row = document.querySelector('button[data-row="session"]')
+                if (row instanceof HTMLElement) row.click()
               })
               await new Promise((r) => setTimeout(r, 600))
             }

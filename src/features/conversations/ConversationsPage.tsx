@@ -12,7 +12,7 @@ import { useEffect } from 'react'
 
 import { useLibrary } from '../../stores/library'
 import { useMinWidth } from '../../hooks/useMediaQuery'
-import { Icon, IconButton } from '../../components/ui'
+import { Drawer, Icon, IconButton } from '../../components/ui'
 import { ConversationViewer } from './ConversationViewer'
 import { SessionList } from './SessionList'
 import { SourceSidebar } from './SourceSidebar'
@@ -48,26 +48,9 @@ export function ConversationsPage() {
           <SourceSidebar />
         </aside>
       ) : filtersOpen ? (
-        <>
-          {/* 抽屉遮罩：点击空白处关闭 */}
-          <button
-            type="button"
-            aria-label="关闭筛选抽屉"
-            onClick={() => setFiltersOpen(false)}
-            className="absolute inset-0 z-20 bg-canvas/60"
-          />
-          <aside className="relative z-30 flex w-[240px] shrink-0 flex-col overflow-hidden border-r border-line bg-panel shadow-overlay">
-            <div className="flex items-center justify-between border-b border-line px-3 py-2">
-              <span className="text-lead text-ink">筛选</span>
-              <IconButton label="关闭筛选抽屉" size="sm" onClick={() => setFiltersOpen(false)}>
-                <Icon name="close" />
-              </IconButton>
-            </div>
-            <div className="flex min-h-0 flex-1 flex-col">
-              <SourceSidebar />
-            </div>
-          </aside>
-        </>
+        <Drawer title="筛选" onClose={() => setFiltersOpen(false)}>
+          <SourceSidebar />
+        </Drawer>
       ) : null}
 
       {/* 会话列表 */}

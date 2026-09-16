@@ -13,7 +13,7 @@ import { useVirtual } from '../../hooks/useVirtual'
 import { dateGroupLabel, formatRelative, sourceLabel, syncStatusLabel } from '../../lib/format'
 import { useLibrary } from '../../stores/library'
 import type { SessionSummary } from '../../types/ipc'
-import { EmptyState, StatusPill } from '../../components/ui'
+import { Dot, EmptyState, StatusPill } from '../../components/ui'
 
 /** 列表行：分组标题或会话行。 */
 type Row =
@@ -28,9 +28,9 @@ const SYNC_TONE: Record<string, 'success' | 'warning' | 'info' | 'neutral'> = {
   archived: 'neutral',
 }
 
-/** 行高：分组 30px（sticky 头），会话 56px（两层信息）。 */
+/** 行高：分组 30px（sticky 头），会话 58px（两层信息 + 行间呼吸）。 */
 const GROUP_HEIGHT = 30
-const SESSION_HEIGHT = 56
+const SESSION_HEIGHT = 58
 
 export function SessionList() {
   const { sessions, total, loadingSessions, selectedId, selectSession, loadSessions, filter } =
@@ -88,6 +88,7 @@ export function SessionList() {
               return (
                 <div
                   key={`${item.index}`}
+                  className={row.type === 'session' ? 'px-1.5' : ''}
                   style={{
                     position: 'absolute',
                     top: 0,
@@ -98,7 +99,7 @@ export function SessionList() {
                   }}
                 >
                   {row.type === 'group' ? (
-                    <div className="sticky top-0 flex h-[30px] items-center bg-panel px-3.5 text-meta font-semibold text-ink-muted">
+                    <div className="sticky top-0 flex h-[30px] items-center bg-panel px-4.5 text-meta font-medium text-ink-faint">
                       {row.label}
                     </div>
                   ) : (
@@ -127,8 +128,10 @@ export function SessionList() {
 /**
  * 单条会话：**两层信息**（规格 §6.1）——标题；来源 / 项目 / 时间。
  *
- * 消息数与设备压缩到第二行的右侧，避免每行堆三层小字。
- * 选中态同时给出背景、左侧强调条与文字颜色，色盲与灰度下也能分辨。
+ * 组件级重设计（批次 3）：
+ * - 行是「物件」不是「表格行」：圆角、两侧内缩（容器 px-1.5），行间靠间距与背景区分；
+ * - 选中态 = 填充表面 + 左侧 inset 强调条（box-shadow，文字不位移）；
+ * - 状态徽标压缩为 sm 尺寸，只在需要时出现（部分解析 / 已归档 / 非本机同步态）。
  */
 function SessionRow({
   session,
@@ -142,37 +145,39 @@ function SessionRow({
   return (
     <button
       type="button"
+      data-row="session"
       onClick={onClick}
       aria-current={active ? 'true' : undefined}
-      className={`flex h-[56px] w-full flex-col justify-center gap-1 border-b border-line/60 px-3.5 text-left transition-colors ${
-        active ? 'bg-selected' : 'hover:bg-hover'
+      className={`flex h-full w-full flex-col justify-center gap-[3px] rounded-control px-3 text-left transition-colors ${
+        active
+          ? 'bg-selected shadow-[inset_2px_0_0_0_var(--semantic-accent)]'
+          : 'hover:bg-hover'
       }`}
     >
       <div className="flex min-w-0 items-center gap-1.5">
-        <span
-          aria-hidden="true"
-          className={`h-3.5 w-0.5 shrink-0 rounded-full ${active ? 'bg-accent' : 'bg-transparent'}`}
-        />
         <span className="min-w-0 flex-1 truncate text-body font-medium text-ink">
           {session.title ?? '无标题'}
         </span>
         {session.partial ? (
-          <StatusPill tone="warning" title="存在未识别事件或损坏行">
+          <StatusPill size="sm" tone="warning" title="存在未识别事件或损坏行">
             部分
           </StatusPill>
         ) : null}
-        {session.archived ? <StatusPill tone="neutral">已归档</StatusPill> : null}
+        {session.archived ? (
+          <StatusPill size="sm" tone="neutral">
+            已归档
+          </StatusPill>
+        ) : null}
         {/* 只有「非仅本机」的会话才额外标注同步状态，避免每行都是噪声 */}
         {!session.archived && session.syncStatus !== 'local' ? (
-          <StatusPill tone={SYNC_TONE[session.syncStatus] ?? 'neutral'}>
+          <StatusPill size="sm" tone={SYNC_TONE[session.syncStatus] ?? 'neutral'}>
             {syncStatusLabel(session.syncStatus)}
           </StatusPill>
         ) : null}
       </div>
-      <div className="flex min-w-0 items-center gap-2 pl-2 text-meta text-ink-muted">
-        <span className={`shrink-0 ${session.source === 'kimi' ? 'text-kimi' : 'text-codex'}`}>
-          {sourceLabel(session.source)}
-        </span>
+      <div className="flex min-w-0 items-center gap-1.5 text-meta text-ink-muted">
+        <Dot tone={session.source === 'kimi' ? 'kimi' : 'codex'} />
+        <span className="shrink-0">{sourceLabel(session.source)}</span>
         <span className="min-w-0 flex-1 truncate">{session.projectPath ?? '未知项目'}</span>
         <span className="ml-auto shrink-0 tabular-nums">
           {session.messageCount} 条 · {formatRelative(session.updatedAt)}

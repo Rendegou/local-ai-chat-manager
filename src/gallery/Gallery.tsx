@@ -24,6 +24,8 @@ import {
   SectionCard,
   SegmentedNav,
   Select,
+  SidebarRow,
+  SectionLabel,
   Skeleton,
   Spinner,
   StatusPill,
@@ -361,33 +363,63 @@ export function Gallery() {
       </Section>
 
       {/* 6. 列表行 */}
-      <Section id="rows" title="列表行" hint="会话行：默认 / 选中 / 部分解析 / 已归档 / 长标题" surface="bg-panel">
-        <div className="max-w-sm">
-          <div className="flex h-[30px] items-center px-3.5 text-meta font-semibold text-ink-muted">
-            今天
+      <Section
+        id="rows"
+        title="列表行"
+        hint="侧栏行 / 分组小标题 / 会话行：默认 / 选中 / 部分解析 / 已归档 / 长标题"
+        surface="bg-panel"
+      >
+        <div className="flex gap-6">
+          <div className="w-56 shrink-0">
+            <SectionLabel>数据源</SectionLabel>
+            <SidebarRow label="全部会话" count={54} active={false} onClick={() => {}} />
+            <SidebarRow
+              label="Codex"
+              count={28}
+              active
+              onClick={() => {}}
+              icon={<Dot tone="codex" />}
+            />
+            <SidebarRow
+              label="Kimi Code"
+              count={26}
+              active={false}
+              onClick={() => {}}
+              icon={<Dot tone="kimi" />}
+            />
+            <SectionLabel trailing={6}>项目</SectionLabel>
+            <SidebarRow label="web-dashboard" count={14} active={false} onClick={() => {}} />
+            <SidebarRow label="redis-go" count={14} active={false} onClick={() => {}} />
           </div>
-          <SessionRow session={DEMO_SESSION} active={false} onClick={() => {}} />
-          <SessionRow session={DEMO_SESSION} active onClick={() => {}} />
-          <SessionRow
-            session={{ ...DEMO_SESSION, id: 'a', partial: true, source: 'codex', title: '实现 RESP3 协议解析器' }}
-            active={false}
-            onClick={() => {}}
-          />
-          <SessionRow
-            session={{ ...DEMO_SESSION, id: 'b', archived: true, syncStatus: 'archived', title: '文章详情页 SEO 元信息' }}
-            active={false}
-            onClick={() => {}}
-          />
-          <SessionRow
-            session={{
-              ...DEMO_SESSION,
-              id: 'c',
-              syncStatus: 'modified',
-              title: '把「会话发现 → 增量索引 → 全文搜索 → 多机同步」串成一条链路，标题非常非常非常长',
-            }}
-            active={false}
-            onClick={() => {}}
-          />
+          <div className="w-96 shrink-0">
+            <div className="flex h-[30px] items-center px-4.5 text-meta font-medium text-ink-faint">
+              今天
+            </div>
+            <div className="px-1.5">
+              <SessionRow session={DEMO_SESSION} active={false} onClick={() => {}} />
+              <SessionRow session={DEMO_SESSION} active onClick={() => {}} />
+              <SessionRow
+                session={{ ...DEMO_SESSION, id: 'a', partial: true, source: 'codex', title: '实现 RESP3 协议解析器' }}
+                active={false}
+                onClick={() => {}}
+              />
+              <SessionRow
+                session={{ ...DEMO_SESSION, id: 'b', archived: true, syncStatus: 'archived', title: '文章详情页 SEO 元信息' }}
+                active={false}
+                onClick={() => {}}
+              />
+              <SessionRow
+                session={{
+                  ...DEMO_SESSION,
+                  id: 'c',
+                  syncStatus: 'modified',
+                  title: '把「会话发现 → 增量索引 → 全文搜索 → 多机同步」串成一条链路，标题非常非常非常长',
+                }}
+                active={false}
+                onClick={() => {}}
+              />
+            </div>
+          </div>
         </div>
       </Section>
 

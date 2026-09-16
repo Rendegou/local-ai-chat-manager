@@ -1,13 +1,15 @@
 /**
  * 来源/项目栏（规格 §6.1）。
  *
- * 结构：顶部「全部会话」→ 数据源（带专属标识与计数）→ 项目列表（可复制路径）→
+ * 结构：顶部「全部会话」→ 数据源（带专属标识与计数）→ 项目列表（悬停出现复制路径）→
  * 底部数据源健康状态。空状态直接给出「扫描」与「打开设置」两个动作。
+ *
+ * 行组件统一走 ui/Rows.tsx 的 SectionLabel + SidebarRow。
  */
 import { useState } from 'react'
 
 import { useLibrary } from '../../stores/library'
-import { Button, Dot, Icon, IconButton, StatusPill } from '../../components/ui'
+import { Button, Dot, Icon, IconButton, SectionLabel, SidebarRow, StatusPill } from '../../components/ui'
 import { baseName, formatRelative } from '../../lib/format'
 
 export function SourceSidebar() {
@@ -27,59 +29,33 @@ export function SourceSidebar() {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-panel">
       {/* 数据源 */}
-      <div className="border-b border-line px-2 py-2">
-        <div className="px-1.5 pb-1 text-meta font-semibold uppercase tracking-wide text-ink-muted">
-          数据源
-        </div>
-        <button
-          type="button"
-          aria-current={!filter.source && !filter.projectPath ? 'true' : undefined}
+      <div className="border-b border-line px-2 pb-2">
+        <SectionLabel>数据源</SectionLabel>
+        <SidebarRow
+          active={!filter.source && !filter.projectPath}
           onClick={() => setFilter({ source: null, projectPath: null, onlyArchived: false })}
-          className={`flex w-full items-center justify-between rounded-control px-2 py-1.5 text-left text-body transition-colors ${
-            !filter.source && !filter.projectPath
-              ? 'bg-selected font-medium text-ink'
-              : 'text-ink-muted hover:bg-hover hover:text-ink'
-          }`}
-        >
-          <span>全部会话</span>
-          <span className="text-meta tabular-nums text-ink-muted">{stats?.sessions ?? 0}</span>
-        </button>
+          label="全部会话"
+          count={stats?.sessions ?? 0}
+        />
         {(['codex', 'kimi'] as const).map((id) => {
           const row = sourceRow(id)
-          const active = filter.source === id && !filter.projectPath
           return (
-            <button
+            <SidebarRow
               key={id}
-              type="button"
-              aria-current={active ? 'true' : undefined}
+              active={filter.source === id && !filter.projectPath}
               onClick={() => setFilter({ source: id, projectPath: null, onlyArchived: false })}
               title={row?.rootPath ?? '未探测到目录'}
-              className={`flex w-full items-center justify-between rounded-control px-2 py-1.5 text-left text-body transition-colors ${
-                active
-                  ? 'bg-selected font-medium text-ink'
-                  : 'text-ink-muted hover:bg-hover hover:text-ink'
-              }`}
-            >
-              <span className="flex min-w-0 items-center gap-1.5">
-                <Dot tone={id === 'kimi' ? 'kimi' : 'codex'} />
-                <span className="min-w-0 flex-1 truncate">{row?.displayName ?? id}</span>
-              </span>
-              <span className="shrink-0 text-meta tabular-nums text-ink-muted">
-                {row?.sessionHint ?? 0}
-              </span>
-            </button>
+              icon={<Dot tone={id === 'kimi' ? 'kimi' : 'codex'} />}
+              label={row?.displayName ?? id}
+              count={row?.sessionHint ?? 0}
+            />
           )
         })}
       </div>
 
       {/* 项目 */}
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="flex items-center justify-between px-3.5 pb-1 pt-2.5">
-          <span className="text-meta font-semibold uppercase tracking-wide text-ink-muted">
-            项目
-          </span>
-          <span className="text-meta tabular-nums text-ink-muted">{projects.length}</span>
-        </div>
+        <SectionLabel trailing={projects.length}>项目</SectionLabel>
         <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
           {projects.length === 0 ? (
             <div className="flex flex-col items-start gap-2 px-1.5 py-2">
@@ -97,16 +73,10 @@ export function SourceSidebar() {
             projects.map((project) => {
               const active = filter.projectPath === project.projectPath
               return (
-                <div
-                  key={project.projectPath}
-                  className={`group flex items-center gap-1 rounded-control pr-1 transition-colors ${
-                    active ? 'bg-selected' : 'hover:bg-hover'
-                  }`}
-                >
-                  <button
-                    type="button"
-                    title={project.projectPath}
-                    aria-current={active ? 'true' : undefined}
+                <div key={project.projectPath} className="group flex items-center gap-0.5 pr-1">
+                  <SidebarRow
+                    className="flex-1"
+                    active={active}
                     onClick={() =>
                       setFilter({
                         projectPath: active ? null : project.projectPath,
@@ -114,23 +84,18 @@ export function SourceSidebar() {
                         onlyArchived: false,
                       })
                     }
-                    className={`flex min-w-0 flex-1 items-center justify-between px-2 py-1.5 text-left text-body ${
-                      active ? 'font-medium text-ink' : 'text-ink-muted hover:text-ink'
-                    }`}
-                  >
-                    <span className="min-w-0 flex-1 truncate">
-                      {project.name || baseName(project.projectPath)}
-                    </span>
-                    <span className="shrink-0 pl-2 text-meta tabular-nums text-ink-muted">
-                      {project.sessionCount}
-                    </span>
-                  </button>
+                    title={project.projectPath}
+                    label={project.name || baseName(project.projectPath)}
+                    count={project.sessionCount}
+                  />
+                  {/* 悬停出现；键盘聚焦时同样可见 */}
                   <IconButton
                     label={copied === project.projectPath ? '已复制路径' : '复制项目路径'}
                     size="sm"
                     onClick={() => copyPath(project.projectPath)}
+                    className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                   >
-                    <Icon name={copied === project.projectPath ? 'check' : 'copy'} />
+                    <Icon name={copied === project.projectPath ? 'check' : 'copy'} size={12} />
                   </IconButton>
                 </div>
               )
