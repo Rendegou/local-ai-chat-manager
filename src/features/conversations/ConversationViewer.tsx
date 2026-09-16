@@ -14,7 +14,7 @@ import { formatDateTime, kindLabel, roleLabel, sourceLabel, syncStatusLabel } fr
 import { useVirtual } from '../../hooks/useVirtual'
 import { useLibrary } from '../../stores/library'
 import type { MessageRow } from '../../types/ipc'
-import { Button, EmptyState, PanelHeader, Skeleton, StatusPill } from '../../components/ui'
+import { Button, Dot, EmptyState, PanelHeader, Skeleton, StatusPill } from '../../components/ui'
 
 /** 每次分页拉取的消息条数。 */
 const PAGE_SIZE = 200
@@ -151,7 +151,7 @@ export function ConversationViewer() {
         }
       />
 
-      <div ref={virtual.containerRef} className="min-h-0 flex-1 overflow-y-auto bg-reading">
+      <div ref={virtual.containerRef} className="min-h-0 flex-1 overflow-y-auto bg-reading-glow">
         {visible.length === 0 ? (
           loading ? (
             <div className="mx-auto max-w-[920px] px-5 py-4">
@@ -199,14 +199,12 @@ export function ConversationViewer() {
 }
 
 /**
- * 单条消息块。
- *
- * 视觉分工：
- * - user：轻微表面差异（accent 左条），表示「人说的话」；
- * - assistant 正文：阅读主轴，不加装饰；
- * - reasoning：次要语气 + 更小字号；
- * - tool_call / tool_result：console-like 块（等宽、独立表面、可横向滚动）；
- * - event：中性提示行。
+ * 单条消息块 —— 消息流的三种「物件」（石墨工作台核心）：
+ * - user：染色实体卡（msg-user），「人说的话」一眼可辨；
+ * - assistant：开放正文，阅读主轴，无容器装饰，行高放宽到 1.75；
+ * - reasoning：引文细线 + 斜体次要语气；
+ * - tool_call / tool_result：内陷终端块（msg-term，等宽、更深表面）；
+ * - event：弱化单行，不占消息卡高度。
  */
 function MessageBlock({ message }: { message: MessageRow }) {
   const [expanded, setExpanded] = useState(false)
@@ -214,45 +212,77 @@ function MessageBlock({ message }: { message: MessageRow }) {
   const isLong = text.length > COLLAPSE_THRESHOLD
   const shown = isLong && !expanded ? text.slice(0, COLLAPSE_THRESHOLD) : text
 
-  const isTool = message.kind === 'tool_call' || message.kind === 'tool_result'
-  const isUser = message.role === 'user'
+  const isToolCall = message.kind === 'tool_call'
+  const isTool = isToolCall || message.kind === 'tool_result'
+  const isUser = message.role === 'user' && message.kind === 'message'
   const isReasoning = message.kind === 'reasoning_summary'
-  const isEvent = message.kind === 'event'
 
-  // 容器语气
-  const container = isTool
-    ? 'border border-line bg-canvas/60'
-    : isUser
-      ? 'border-l-2 border-l-accent bg-accent/5'
-      : isEvent
-        ? 'border-l-2 border-l-line-strong bg-canvas/40'
-        : 'border-l-2 border-l-transparent'
+  // 事件：一行弱字 + 色点，不进入消息节奏
+  if (message.kind === 'event') {
+    return (
+      <div className="my-2 flex items-baseline gap-2.5 px-1 text-meta text-ink-faint">
+        <Dot className="translate-y-[-1px]" />
+        <span className="min-w-0 flex-1 whitespace-pre-wrap [overflow-wrap:anywhere]">
+          {text || kindLabel(message.kind)}
+        </span>
+        <MsgTime message={message} />
+      </div>
+    )
+  }
+
+  const container = isUser
+    ? 'msg-user my-3 px-3.5 py-2.5'
+    : isTool
+      ? 'msg-term my-2.5 px-3 py-2'
+      : isReasoning
+        ? 'msg-reason my-3 py-0.5'
+        : 'my-3.5'
 
   // `[overflow-wrap:anywhere]` 而不是 `break-words`：
   // 前者会参与固有最小宽度计算，长路径 / 长 JSON 才不会把整个阅读区撑宽（200% 缩放时尤其明显）
   const bodyClass = isTool
-    ? 'font-mono text-meta leading-5 whitespace-pre-wrap [overflow-wrap:anywhere]'
+    ? 'pt-1 font-mono text-meta leading-[1.65] text-ink whitespace-pre-wrap [overflow-wrap:anywhere]'
     : isReasoning
-      ? 'text-meta italic leading-6 text-ink-muted whitespace-pre-wrap [overflow-wrap:anywhere]'
-      : isEvent
-        ? 'text-meta leading-6 text-ink-muted whitespace-pre-wrap [overflow-wrap:anywhere]'
-        : 'text-body leading-6 whitespace-pre-wrap [overflow-wrap:anywhere]'
+      ? 'pt-0.5 text-meta italic leading-6 text-ink-muted whitespace-pre-wrap [overflow-wrap:anywhere]'
+      : 'pt-1 text-body leading-[1.75] text-ink whitespace-pre-wrap [overflow-wrap:anywhere]'
 
   return (
-    <article className={`my-2 rounded-panel px-3 py-2 ${container}`}>
-      <header className="flex items-center gap-2 pb-1 text-meta text-ink-muted">
-        <span className="font-medium text-ink">{roleLabel(message.role)}</span>
-        {message.kind !== 'message' ? <span>{kindLabel(message.kind)}</span> : null}
-        {message.toolName ? <span className="text-tech text-ink">{message.toolName}</span> : null}
-        <span className="ml-auto flex items-center gap-2 text-tech text-ink-muted">
-          <span title="消息序号">#{message.sequence}</span>
-          {message.timestamp ? <span>{formatDateTime(message.timestamp)}</span> : null}
-        </span>
+    <article className={container}>
+      <header className="msg-head">
+        {isTool ? (
+          <>
+            <span aria-hidden="true" className="font-mono text-meta leading-none text-accent">
+              {isToolCall ? '$' : '↵'}
+            </span>
+            {message.toolName ? (
+              <span className="font-mono text-meta text-ink">{message.toolName}</span>
+            ) : null}
+            <span className="text-ink-muted">{kindLabel(message.kind)}</span>
+          </>
+        ) : (
+          <>
+            <span
+              className={
+                isUser
+                  ? 'font-semibold text-accent'
+                  : isReasoning
+                    ? 'text-ink-faint'
+                    : 'font-medium text-ink'
+              }
+            >
+              {isReasoning ? kindLabel(message.kind) : roleLabel(message.role)}
+            </span>
+            {!isReasoning && message.kind !== 'message' ? (
+              <span className="text-ink-muted">{kindLabel(message.kind)}</span>
+            ) : null}
+          </>
+        )}
+        <MsgTime message={message} />
       </header>
       {text ? (
         <pre className={bodyClass}>{shown}</pre>
       ) : (
-        <div className="text-meta text-ink-muted">（无文本内容）</div>
+        <div className="pt-0.5 text-meta text-ink-muted">（无文本内容）</div>
       )}
       {isLong ? (
         <button
@@ -264,5 +294,15 @@ function MessageBlock({ message }: { message: MessageRow }) {
         </button>
       ) : null}
     </article>
+  )
+}
+
+/** 序号 + 时间：tabular mono 右置，安静但可核对。 */
+function MsgTime({ message }: { message: MessageRow }) {
+  return (
+    <span className="msg-time">
+      <span title="消息序号">#{message.sequence}</span>
+      {message.timestamp ? <span> · {formatDateTime(message.timestamp)}</span> : null}
+    </span>
   )
 }

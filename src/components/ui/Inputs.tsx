@@ -24,7 +24,7 @@ export function TextInput({
         onKeyDown?.(event)
         if (event.key === 'Enter' && onEnter) onEnter()
       }}
-      className={`w-full rounded-control border border-line bg-canvas px-2.5 py-1.5 text-body text-ink transition-colors placeholder:text-ink-faint hover:border-line-strong focus-visible:border-accent disabled:opacity-50 ${className}`}
+      className={`w-full rounded-control border border-line bg-canvas px-2.5 py-1.5 text-body text-ink shadow-sunken transition-colors placeholder:text-ink-faint hover:border-line-strong focus-visible:border-accent disabled:opacity-50 ${className}`}
       {...rest}
     />
   )
@@ -43,7 +43,7 @@ export function Select({
 }) {
   return (
     <select
-      className={`rounded-control border border-line bg-canvas px-2 py-1.5 text-body text-ink transition-colors hover:border-line-strong focus-visible:border-accent disabled:opacity-50 ${className}`}
+      className={`rounded-control border border-line bg-canvas px-2 py-1.5 text-body text-ink shadow-sunken transition-colors hover:border-line-strong focus-visible:border-accent disabled:opacity-50 ${className}`}
       {...rest}
     >
       {options

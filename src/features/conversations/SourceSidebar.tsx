@@ -7,7 +7,7 @@
 import { useState } from 'react'
 
 import { useLibrary } from '../../stores/library'
-import { Button, IconButton, StatusPill } from '../../components/ui'
+import { Button, Dot, Icon, IconButton, StatusPill } from '../../components/ui'
 import { baseName, formatRelative } from '../../lib/format'
 
 export function SourceSidebar() {
@@ -61,9 +61,7 @@ export function SourceSidebar() {
               }`}
             >
               <span className="flex min-w-0 items-center gap-1.5">
-                <span aria-hidden="true" className={id === 'kimi' ? 'text-kimi' : 'text-codex'}>
-                  {id === 'kimi' ? '◆' : '◇'}
-                </span>
+                <Dot tone={id === 'kimi' ? 'kimi' : 'codex'} />
                 <span className="min-w-0 flex-1 truncate">{row?.displayName ?? id}</span>
               </span>
               <span className="shrink-0 text-meta tabular-nums text-ink-muted">
@@ -132,7 +130,7 @@ export function SourceSidebar() {
                     size="sm"
                     onClick={() => copyPath(project.projectPath)}
                   >
-                    <span aria-hidden="true">{copied === project.projectPath ? '✓' : '⧉'}</span>
+                    <Icon name={copied === project.projectPath ? 'check' : 'copy'} />
                   </IconButton>
                 </div>
               )

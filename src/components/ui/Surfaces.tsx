@@ -36,7 +36,7 @@ export function PanelHeader({
         <div className="flex min-w-0 flex-1 items-baseline gap-2.5">
           {/* truncate 必须配 min-w-0 + flex-1：否则 nowrap 文本的固有宽度会撑宽整个头部
               （仅在文字放到 200% 时才暴露出来） */}
-          <h2 className="min-w-0 flex-1 truncate text-title text-ink">{title}</h2>
+          <h2 className="min-w-0 flex-1 truncate font-display text-title text-ink">{title}</h2>
           {meta ? (
             <div className="min-w-0 flex-1 truncate text-meta text-ink-muted">{meta}</div>
           ) : null}
@@ -68,19 +68,27 @@ export function SectionCard({
   children: ReactNode
   className?: string
 }) {
-  const border = tone === 'danger' ? 'border-danger/45' : 'border-line'
+  // 默认卡：投影 + 顶内高光声明 elevation，不再加描边；danger 卡用语义描边 + 淡染
+  const skin =
+    tone === 'danger'
+      ? 'border border-danger/40 bg-danger/5'
+      : 'bg-panel shadow-panel'
   return (
-    <section className={`rounded-panel border ${border} bg-panel ${className}`}>
-      <header className="flex items-start justify-between gap-3 border-b border-line px-3.5 py-2.5">
+    <section className={`rounded-panel ${skin} ${className}`}>
+      <header className="flex items-start justify-between gap-3 border-b border-line/70 px-4 py-3">
         <div className="min-w-0">
-          <h3 className={`text-lead ${tone === 'danger' ? 'text-danger' : 'text-ink'}`}>{title}</h3>
+          <h3
+            className={`font-display text-lead ${tone === 'danger' ? 'text-danger' : 'text-ink'}`}
+          >
+            {title}
+          </h3>
           {description ? (
             <p className="pt-0.5 text-meta text-ink-muted">{description}</p>
           ) : null}
         </div>
         {actions ? <div className="flex shrink-0 items-center gap-1.5">{actions}</div> : null}
       </header>
-      <div className="px-3.5 py-3">{children}</div>
+      <div className="px-4 py-3.5">{children}</div>
     </section>
   )
 }
@@ -153,7 +161,7 @@ export function Field({
   hint?: ReactNode
 }) {
   return (
-    <div className="flex items-start gap-3 border-b border-line/60 py-2 last:border-b-0">
+    <div className="flex items-start gap-3 py-2">
       <div className="w-28 shrink-0 pt-0.5 text-meta text-ink-muted">{label}</div>
       <div className={`min-w-0 flex-1 text-body text-ink ${mono ? 'break-all font-mono text-meta' : ''}`}>
         {children}

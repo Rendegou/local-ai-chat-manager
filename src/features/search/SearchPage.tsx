@@ -15,6 +15,7 @@ import type { SearchResponse, SessionFilter } from '../../types/ipc'
 import {
   Button,
   EmptyState,
+  Icon,
   Notice,
   PanelHeader,
   Select,
@@ -169,7 +170,7 @@ export function SearchPage() {
               onClick={() => setAdvancedOpen((value) => !value)}
               className="h-10"
             >
-              <span aria-hidden="true">{advancedOpen ? '▾' : '▸'}</span>
+              <Icon name="chevron" className={advancedOpen ? '' : '-rotate-90'} />
               高级筛选
               {chips.length > 0 ? ` (${chips.length})` : ''}
             </Button>
@@ -190,9 +191,7 @@ export function SearchPage() {
                   className="inline-flex items-center gap-1 rounded-control border border-line bg-canvas px-2 py-0.5 text-meta text-ink transition-colors hover:border-line-strong"
                 >
                   {chip.label}
-                  <span aria-hidden="true" className="text-ink-muted">
-                    ✕
-                  </span>
+                  <Icon name="close" size={11} className="text-ink-muted" />
                 </button>
               ))}
               <Button tone="ghost" size="sm" onClick={clearFilters}>

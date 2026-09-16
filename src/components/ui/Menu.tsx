@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { IconButton } from './Button'
+import { Icon } from './Icon'
 
 /** 菜单项。 */
 export interface MenuItem {
@@ -27,11 +28,12 @@ export interface MenuItem {
 export function Menu({
   label = '更多操作',
   items,
-  glyph = '⋯',
+  glyph,
 }: {
   label?: string
   items: MenuItem[]
-  glyph?: string
+  /** 自定义触发图标；默认是三点「更多」图标 */
+  glyph?: ReactNode
 }) {
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -67,13 +69,13 @@ export function Menu({
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
-        <span aria-hidden="true">{glyph}</span>
+        {glyph ?? <Icon name="more" />}
       </IconButton>
       {open ? (
         <div
           role="menu"
           aria-label={label}
-          className="absolute right-0 top-[calc(100%+6px)] z-30 min-w-[200px] rounded-overlay border border-line bg-overlay py-1 shadow-overlay"
+          className="absolute right-0 top-[calc(100%+6px)] z-30 min-w-[200px] animate-pop rounded-overlay border border-line bg-overlay py-1 shadow-overlay"
         >
           {items.map((item, index) => (
             <button
@@ -115,7 +117,7 @@ export function SegmentedNav({
   return (
     <nav
       aria-label="主导航"
-      className="flex items-center gap-0.5 rounded-panel border border-line bg-canvas p-0.5"
+      className="flex items-center gap-0.5 rounded-panel border border-line bg-canvas p-[3px] shadow-sunken"
     >
       {items.map((item) => {
         const active = item.key === current
@@ -128,7 +130,7 @@ export function SegmentedNav({
             onClick={() => onSelect(item.key)}
             className={`rounded-control px-3 py-1 text-body transition-colors ${
               active
-                ? 'bg-panel font-medium text-ink shadow-[0_1px_2px_oklch(0_0_0/0.18)]'
+                ? 'bg-overlay font-medium text-ink shadow-panel'
                 : 'text-ink-muted hover:bg-hover hover:text-ink'
             }`}
           >

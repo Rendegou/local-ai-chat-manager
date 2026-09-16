@@ -6,6 +6,15 @@
     <title>Local AI Chat Manager</title>
   </head>
   <body>
+    <!--
+      DIRECTION CONTRACT — Local Chats「石墨工作台」
+      THESIS: 开发者深夜翻查 AI 会话档案的工作台；消息流是主角——用户/助手/工具是三种一眼可辨的物件，拒绝管理后台式的无边列表格。
+      OWN-WORLD: 石墨四层表面用亮度阶梯 + 柔和投影 + 顶内高光分层（1px 描边只留真实结构边界）；信号蓝 accent；用户消息=染色实体卡，助手=开放正文，工具=内陷终端块；CJK 系统字 + 表格化数字。
+      STORY: 打开即读，三秒内分辨「谁说了什么、工具做了什么」；状态区永远诚实。
+      FIRST VIEWPORT: 顶栏（品牌标 + 分段导航 + 状态区）/ 来源栏 / 会话列表 / 阅读器消息流。
+      FORM: Raycast/Linear 级桌面工具正典——用户钦定方向（canon, played straight）。
+      FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+    -->
     <!-- React 挂载点：界面为纯 Web 前端，系统能力全部通过 IPC 调 Rust -->
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>

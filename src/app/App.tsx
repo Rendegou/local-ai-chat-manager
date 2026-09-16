@@ -20,6 +20,7 @@ import { SyncPage } from '../features/sync/SyncPage'
 import { SettingsPage } from '../features/settings/SettingsPage'
 import {
   Button,
+  Icon,
   IconButton,
   Menu,
   Notice,
@@ -170,13 +171,13 @@ export default function App() {
                 }
               }}
             >
-              <span aria-hidden="true">⌗</span>
+              <Icon name="filter" />
               {filtersActive ? filterSummary : wideEnough ? '全部会话' : '筛选'}
             </Button>
           ) : null}
 
           <IconButton label="搜索会话内容" onClick={() => setPage('search')}>
-            <span aria-hidden="true">⌕</span>
+            <Icon name="search" />
           </IconButton>
 
           <Menu

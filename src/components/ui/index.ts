@@ -15,3 +15,4 @@ export {
 export { PanelHeader, SectionCard, FormField, Field, EmptyState } from './Surfaces'
 export { TextInput, Select, Toggle } from './Inputs'
 export { Menu, SegmentedNav, StatusArea, type MenuItem } from './Menu'
+export { Icon, Dot, type IconName } from './Icon'

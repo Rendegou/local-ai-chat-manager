@@ -12,7 +12,7 @@ import { useEffect } from 'react'
 
 import { useLibrary } from '../../stores/library'
 import { useMinWidth } from '../../hooks/useMediaQuery'
-import { IconButton } from '../../components/ui'
+import { Icon, IconButton } from '../../components/ui'
 import { ConversationViewer } from './ConversationViewer'
 import { SessionList } from './SessionList'
 import { SourceSidebar } from './SourceSidebar'
@@ -60,7 +60,7 @@ export function ConversationsPage() {
             <div className="flex items-center justify-between border-b border-line px-3 py-2">
               <span className="text-lead text-ink">筛选</span>
               <IconButton label="关闭筛选抽屉" size="sm" onClick={() => setFiltersOpen(false)}>
-                <span aria-hidden="true">✕</span>
+                <Icon name="close" />
               </IconButton>
             </div>
             <div className="flex min-h-0 flex-1 flex-col">
@@ -84,7 +84,7 @@ export function ConversationsPage() {
           {!listAndDetail && selectedId ? (
             <div className="flex items-center gap-2 border-b border-line bg-panel px-3 py-1.5">
               <IconButton label="返回会话列表" size="sm" onClick={() => void selectSession(null)}>
-                <span aria-hidden="true">←</span>
+                <Icon name="back" />
               </IconButton>
               <span className="text-meta text-ink-muted">返回列表</span>
             </div>

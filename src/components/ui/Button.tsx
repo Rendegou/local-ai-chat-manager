@@ -30,8 +30,12 @@ export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement
 
 /** 语气 → 类名。 */
 const TONE: Record<ButtonTone, string> = {
-  primary: 'bg-accent text-accent-ink hover:brightness-110 active:brightness-95 border border-transparent',
-  secondary: 'bg-panel text-ink border border-line hover:bg-hover active:bg-hover',
+  // 主按钮：accent 渐变 + 顶内高光 + 柔和投影（唯一允许「浮起」的按钮）
+  primary:
+    'btn-primary text-accent-ink border border-transparent hover:brightness-105 active:brightness-95',
+  // 次按钮：升一级的表面 + 细边 + 轻投影（声明一次 elevation）
+  secondary:
+    'bg-overlay text-ink border border-line shadow-panel hover:border-line-strong active:bg-hover',
   ghost: 'bg-transparent text-ink-muted border border-transparent hover:bg-hover hover:text-ink',
   danger: 'bg-transparent text-danger border border-danger/45 hover:bg-danger/12 active:bg-danger/18',
 }

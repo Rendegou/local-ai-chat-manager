@@ -2,10 +2,12 @@
  * 状态类原语：状态胶囊、提示条、加载与骨架屏（规格 §4.3 / §7）。
  *
  * 核心规则：**任何语义状态都不能只靠颜色表达**。
- * 因此 StatusPill 与 Notice 都强制带一个字形（✓ / ! / ✕ / •）或图标，
- * 色盲用户与灰度截图下同样可辨。
+ * StatusPill 与 Notice 的语义语气强制带图标（✓/!/✕/i 的 SVG 版）；
+ * 来源身份（codex/kimi）与中性态用色点，且始终伴随文字标签出现。
  */
 import type { ReactNode } from 'react'
+
+import { Dot, Icon, type IconName } from './Icon'
 
 /** 语义语气。 */
 export type Tone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger' | 'info' | 'codex' | 'kimi'
@@ -25,25 +27,36 @@ const TONE_TEXT: Record<Tone, string> = {
 /** 语气 → 边框/底色类名。 */
 const TONE_SURFACE: Record<Tone, string> = {
   neutral: 'border-line bg-canvas/40',
-  accent: 'border-accent/40 bg-accent/10',
-  success: 'border-success/45 bg-success/10',
-  warning: 'border-warning/45 bg-warning/12',
-  danger: 'border-danger/45 bg-danger/12',
-  info: 'border-info/40 bg-info/10',
-  codex: 'border-codex/35 bg-codex/10',
-  kimi: 'border-kimi/35 bg-kimi/10',
+  accent: 'border-accent/35 bg-accent/10',
+  success: 'border-success/40 bg-success/10',
+  warning: 'border-warning/40 bg-warning/10',
+  danger: 'border-danger/40 bg-danger/10',
+  info: 'border-info/35 bg-info/10',
+  codex: 'border-codex/30 bg-codex/10',
+  kimi: 'border-kimi/30 bg-kimi/10',
 }
 
-/** 语气 → 字形（非颜色的冗余表达）。 */
-const TONE_GLYPH: Record<Tone, string> = {
-  neutral: '•',
-  accent: '•',
-  success: '✓',
-  warning: '!',
-  danger: '✕',
-  info: 'i',
-  codex: '◇',
-  kimi: '◆',
+/** 语义语气 → 图标（非颜色的冗余表达）。 */
+const TONE_ICON: Partial<Record<Tone, IconName>> = {
+  success: 'check',
+  warning: 'warning',
+  danger: 'close',
+  info: 'info',
+}
+
+/** 身份/中性语气 → 色点。 */
+const TONE_DOT: Partial<Record<Tone, 'neutral' | 'accent' | 'codex' | 'kimi'>> = {
+  neutral: 'neutral',
+  accent: 'accent',
+  codex: 'codex',
+  kimi: 'kimi',
+}
+
+/** 语气徽章：图标或色点，始终与文字一起出现。 */
+function ToneMark({ tone, size = 11 }: { tone: Tone; size?: number }) {
+  const icon = TONE_ICON[tone]
+  if (icon) return <Icon name={icon} size={size} className={TONE_TEXT[tone]} />
+  return <Dot tone={TONE_DOT[tone] ?? 'neutral'} />
 }
 
 /** 状态胶囊：数据源、同步状态、解析状态、归档状态等统一使用它。 */
@@ -51,22 +64,17 @@ export function StatusPill({
   tone = 'neutral',
   children,
   title,
-  /** 覆盖默认字形（例如数据源用专属标识） */
-  glyph,
 }: {
   tone?: Tone
   children: ReactNode
   title?: string
-  glyph?: string
 }) {
   return (
     <span
       title={title}
-      className={`inline-flex shrink-0 items-center gap-1 rounded-control border px-1.5 py-0.5 text-meta leading-5 ${TONE_SURFACE[tone]}`}
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-meta leading-5 ${TONE_SURFACE[tone]}`}
     >
-      <span aria-hidden="true" className={`text-micro font-semibold ${TONE_TEXT[tone]}`}>
-        {glyph ?? TONE_GLYPH[tone]}
-      </span>
+      <ToneMark tone={tone} />
       <span className="text-ink">{children}</span>
     </span>
   )
@@ -96,8 +104,8 @@ export function Notice({
       role={role}
       className={`flex items-start gap-2.5 rounded-panel border px-3 py-2.5 ${TONE_SURFACE[tone]} ${className}`}
     >
-      <span aria-hidden="true" className={`pt-0.5 text-meta font-semibold ${TONE_TEXT[tone]}`}>
-        {TONE_GLYPH[tone]}
+      <span className={`pt-1 ${TONE_TEXT[tone]}`}>
+        <ToneMark tone={tone} size={13} />
       </span>
       <div className="min-w-0 flex-1">
         {title ? <div className="text-body font-medium text-ink">{title}</div> : null}

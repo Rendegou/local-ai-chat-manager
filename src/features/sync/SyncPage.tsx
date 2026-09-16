@@ -21,6 +21,7 @@ import {
   Button,
   EmptyState,
   Field,
+  Icon,
   IconButton,
   Notice,
   PanelHeader,
@@ -128,7 +129,7 @@ export function SyncPage() {
               onClick={() => void refresh()}
               className={running ? 'opacity-50' : ''}
             >
-              <span aria-hidden="true">⟳</span>
+              <Icon name="refresh" />
             </IconButton>
             <Button
               tone="ghost"

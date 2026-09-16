@@ -18,6 +18,7 @@ import io
 import json
 import os
 import random
+import shutil
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -252,6 +253,10 @@ def main():
     random.seed(args.seed)
     codex_root = os.path.join(args.out, "codex-home")
     kimi_root = os.path.join(args.out, "kimi-home")
+    # 重复运行要幂等：先清掉上次生成的两个数据源目录，否则会话会不断累积
+    for root in (codex_root, kimi_root):
+        if os.path.isdir(root):
+            shutil.rmtree(root)
     now = datetime.now(timezone.utc).replace(microsecond=0)
 
     codex_index, kimi_index = [], []
