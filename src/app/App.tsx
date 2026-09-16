@@ -31,7 +31,7 @@ import {
 } from '../components/ui'
 import { describeFilter, formatRelative } from '../lib/format'
 import { useMinWidth } from '../hooks/useMediaQuery'
-import appIcon from '../assets/app-icon.png'
+import appIcon from '../assets/brand-icon.png'
 
 /** 导航项。 */
 const NAV: Array<{ key: PageKey; label: string; hint: string }> = [
