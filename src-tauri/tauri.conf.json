@@ -15,8 +15,8 @@
         "title": "Local AI Chat Manager",
         "width": 1360,
         "height": 860,
-        "minWidth": 1000,
-        "minHeight": 640,
+        "minWidth": 900,
+        "minHeight": 600,
         "resizable": true,
         "center": true
       }
@@ -27,7 +27,13 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi", "dmg", "appimage", "deb"],
+    "targets": [
+      "nsis",
+      "msi",
+      "dmg",
+      "appimage",
+      "deb"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

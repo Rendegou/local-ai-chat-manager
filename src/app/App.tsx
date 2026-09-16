@@ -1,8 +1,13 @@
 /**
- * 应用外壳：顶部工具栏 + 页面切换 + 全局状态提示。
+ * 应用外壳（规格 §5.1）：顶部工具栏分三个区域 + 页面主体 + 全局状态提示。
  *
- * Phase 1（设计基础层）只做令牌化与原语替换：结构、数据流、交互行为保持不变。
- * 工具栏的信息优先级重组放到 Phase 2。
+ * 工具栏信息优先级：
+ * - 左：产品名 + 当前资料库摘要（会话数 / 消息数）；
+ * - 中：四个一级入口，用 segmented navigation 与普通按钮区分；
+ * - 右：统一状态区（扫描进度 / 同步状态 / 数据源异常）+ 搜索 + 更多操作 + 扫描入口。
+ *
+ * 「扫描」不再永久占据主按钮：索引为空时它是主动作，之后退到「更多操作」，
+ * 进度则进入统一状态区。
  */
 import { useEffect } from 'react'
 
@@ -13,8 +18,18 @@ import { ConversationsPage } from '../features/conversations/ConversationsPage'
 import { SearchPage } from '../features/search/SearchPage'
 import { SyncPage } from '../features/sync/SyncPage'
 import { SettingsPage } from '../features/settings/SettingsPage'
-import { Button, IconButton, Notice, Spinner, StatusPill } from '../components/ui'
-import { formatRelative } from '../lib/format'
+import {
+  Button,
+  IconButton,
+  Menu,
+  Notice,
+  SegmentedNav,
+  Spinner,
+  StatusArea,
+  StatusPill,
+} from '../components/ui'
+import { describeFilter, formatRelative } from '../lib/format'
+import { useMinWidth } from '../hooks/useMediaQuery'
 
 /** 导航项。 */
 const NAV: Array<{ key: PageKey; label: string; hint: string }> = [
@@ -37,8 +52,13 @@ export default function App() {
     setError,
     stats,
     sources,
+    filter,
+    filtersOpen,
+    setFiltersOpen,
   } = useLibrary()
   const syncStatus = useSync((state) => state.status)
+  // 宽窗口下三栏并排，来源栏常驻；窄窗口改为抽屉，由工具栏「筛选」按钮唤出
+  const wideEnough = useMinWidth('xl')
 
   // 启动：加载设置 / 数据源 / 会话；订阅后端事件
   useEffect(() => {
@@ -79,69 +99,128 @@ export default function App() {
     }
   }, [theme])
 
+  const indexed = (stats?.sessions ?? 0) > 0
   const missingSources = sources.filter((source) => !source.found)
+  const filterSummary = describeFilter(filter)
+  const filtersActive = filterSummary !== '全部会话'
 
   return (
     <div className="flex h-full flex-col bg-canvas text-ink">
-      {/* 顶部工具栏 */}
-      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-line bg-panel px-3.5">
-        <div className="flex items-baseline gap-2.5">
+      <header className="flex h-13 shrink-0 items-center gap-3 border-b border-line bg-panel px-3.5 py-2">
+        {/* 左：品牌 + 资料库摘要 */}
+        <div className="flex min-w-0 items-baseline gap-2.5">
           <span className="text-title text-ink">Local Chats</span>
-          <span className="text-meta text-ink-muted">
+          <span className="truncate text-meta text-ink-muted">
             {stats ? `${stats.sessions} 会话 · ${stats.messages} 消息` : '索引未就绪'}
           </span>
         </div>
 
-        <nav aria-label="主导航" className="flex items-center gap-0.5 pl-2">
-          {NAV.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              title={item.hint}
-              aria-current={page === item.key ? 'page' : undefined}
-              onClick={() => setPage(item.key)}
-              className={`rounded-control px-2.5 py-1.5 text-body transition-colors ${
-                page === item.key
-                  ? 'bg-selected font-medium text-ink'
-                  : 'text-ink-muted hover:bg-hover hover:text-ink'
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
-        </nav>
+        {/* 中：一级导航 */}
+        <div className="mx-auto flex items-center gap-2">
+          <SegmentedNav
+            items={NAV.map((item) => ({ key: item.key, label: item.label, hint: item.hint }))}
+            current={page}
+            onSelect={(key) => setPage(key as PageKey)}
+          />
+        </div>
 
-        <div className="ml-auto flex items-center gap-2">
-          {scanning ? (
-            <Spinner
-              label={scanProgress ? `扫描 ${scanProgress.done}/${scanProgress.total}` : '扫描中…'}
-            />
-          ) : null}
-          {missingSources.length > 0 ? (
-            <StatusPill tone="warning" title="未探测到数据目录，可在设置中手工指定">
-              {missingSources.length} 个数据源未找到
+        {/* 右：统一状态区 + 操作 */}
+        <div className="flex shrink-0 items-center gap-2">
+          <StatusArea>
+            {scanning ? (
+              <Spinner
+                label={
+                  scanProgress ? `扫描 ${scanProgress.done}/${scanProgress.total}` : '扫描中…'
+                }
+              />
+            ) : null}
+            {missingSources.length > 0 ? (
+              <StatusPill tone="warning" title="未探测到数据目录，可在设置中手工指定">
+                {missingSources.length} 个数据源未找到
+              </StatusPill>
+            ) : null}
+            <StatusPill
+              tone={syncStatus?.conflict ? 'danger' : syncStatus?.isRepo ? 'success' : 'neutral'}
+              title={syncStatus?.conflict ? '存在同步冲突' : '同步状态'}
+            >
+              {syncStatus?.conflict
+                ? '同步冲突'
+                : syncStatus?.isRepo
+                  ? `已同步 ${formatRelative(syncStatus.lastPush ?? syncStatus.lastPull)}`
+                  : '未配置同步'}
             </StatusPill>
+          </StatusArea>
+
+          {page === 'conversations' ? (
+            <Button
+              tone={filtersActive ? 'secondary' : 'ghost'}
+              size="sm"
+              aria-expanded={!wideEnough ? filtersOpen : undefined}
+              title="按来源 / 项目筛选会话"
+              onClick={() => {
+                if (wideEnough) {
+                  // 宽窗口下来源栏常驻，这里只把筛选重置为全部
+                  useLibrary.getState().resetFilter()
+                } else {
+                  setFiltersOpen(!filtersOpen)
+                }
+              }}
+            >
+              <span aria-hidden="true">⌗</span>
+              {filtersActive ? filterSummary : wideEnough ? '全部会话' : '筛选'}
+            </Button>
           ) : null}
-          <StatusPill
-            tone={syncStatus?.conflict ? 'danger' : syncStatus?.isRepo ? 'success' : 'neutral'}
-            title={syncStatus?.conflict ? '存在同步冲突' : '同步状态'}
-          >
-            {syncStatus?.conflict
-              ? '同步冲突'
-              : syncStatus?.isRepo
-                ? `已同步 ${formatRelative(syncStatus.lastPush ?? syncStatus.lastPull)}`
-                : '未配置同步'}
-          </StatusPill>
+
           <IconButton label="搜索会话内容" onClick={() => setPage('search')}>
             <span aria-hidden="true">⌕</span>
           </IconButton>
-          <Button tone="primary" onClick={() => void scan(false)} loading={scanning}>
-            {scanning ? '扫描中' : '扫描'}
-          </Button>
+
+          <Menu
+            items={[
+              { label: '立即扫描', onClick: () => void scan(false), hint: '增量' },
+              { label: '重建索引', onClick: () => void scan(true), tone: 'danger', hint: '全量' },
+              {
+                label: '打开数据目录',
+                onClick: () => {
+                  void ipc.dataDir().then((dir) => {
+                    if (dir) void import('@tauri-apps/plugin-opener').then((m) => m.openPath(dir))
+                  })
+                },
+              },
+              { label: '设置', onClick: () => setPage('settings') },
+            ]}
+          />
+
+          {/* 首次使用（索引为空）时，「扫描」是主动作 */}
+          {!indexed && !scanning ? (
+            <Button tone="primary" onClick={() => void scan(false)}>
+              扫描本地会话
+            </Button>
+          ) : null}
         </div>
       </header>
 
-      {/* 页面主体 */}
+      {filtersOpen && !wideEnough && page === 'conversations' ? (
+        <div className="border-b border-line bg-panel px-3.5 py-2">
+          <Notice
+            tone="info"
+            title={`筛选：${filterSummary}`}
+            actions={
+              <>
+                <Button size="sm" tone="ghost" onClick={() => useLibrary.getState().resetFilter()}>
+                  清除筛选
+                </Button>
+                <Button size="sm" onClick={() => setFiltersOpen(false)}>
+                  收起
+                </Button>
+              </>
+            }
+          >
+            窄窗口下来源/项目栏收进抽屉；在会话页左侧抽屉中选择即可。
+          </Notice>
+        </div>
+      ) : null}
+
       <main className="flex min-h-0 flex-1">
         {page === 'conversations' ? <ConversationsPage /> : null}
         {page === 'search' ? <SearchPage /> : null}

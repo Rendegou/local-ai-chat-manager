@@ -279,6 +279,24 @@ def main():
         if newest is None or updated > newest[3]:
             newest = entry
 
+    # ---- 排版压力样本（规格 §8 Phase 2 验收：长标题/长路径不得破坏布局）----
+    stress = [
+        (
+            "把「会话发现 → 增量索引 → 全文搜索 → 多机同步」整条链路的错误处理与可观测性补齐",
+            "/home/dev/projects/platform/monorepo/services/data-pipeline/ingest/adapters/codex-parser",
+        ),
+        (
+            "Investigate intermittent timeout when the upstream gateway keeps the connection open beyond the configured idle window",
+            "/home/dev/work/clients/acme/2026/q3/migration/legacy/reports/generator",
+        ),
+    ]
+    for index, (title, project) in enumerate(stress):
+        when = now - timedelta(days=1, hours=index + 1)
+        thread = str(uuid.uuid4())
+        topic = [("user", f"{title}"), ("assistant", "好的，我先按模块梳理现状，再按风险排序给出改动计划。")]
+        updated = codex_session(codex_root, thread, title, project, when, topic)
+        codex_index.append({"id": thread, "thread_name": title, "updated_at": iso(updated)})
+
     # Codex 的标题索引（应用会读它来显示标题）
     if codex_index:
         write(os.path.join(codex_root, "session_index.jsonl"), jsonl(codex_index))

@@ -28,6 +28,8 @@ interface LibraryState {
 
   // ---- 导航 ----
   page: PageKey
+  /** 窄窗口下的筛选抽屉是否展开（纯 UI 状态） */
+  filtersOpen: boolean
 
   // ---- 设置与数据源 ----
   settings: AppSettings | null
@@ -54,6 +56,7 @@ interface LibraryState {
 
   // ---- actions ----
   setPage: (page: PageKey) => void
+  setFiltersOpen: (open: boolean) => void
   setTheme: (theme: 'system' | 'light' | 'dark') => void
   setError: (error: ipc.IpcError | null) => void
   bootstrap: () => Promise<void>
@@ -88,6 +91,7 @@ const PAGE_SIZE = 200
 export const useLibrary = create<LibraryState>((set, get) => ({
   theme: 'system',
   page: 'conversations',
+  filtersOpen: false,
   settings: null,
   sources: [],
   machines: [],
@@ -105,6 +109,7 @@ export const useLibrary = create<LibraryState>((set, get) => ({
   error: null,
 
   setPage: (page) => set({ page }),
+  setFiltersOpen: (filtersOpen) => set({ filtersOpen }),
   setTheme: (theme) => set({ theme }),
   setError: (error) => set({ error }),
 

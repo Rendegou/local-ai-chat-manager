@@ -1,17 +1,28 @@
 /**
- * 左栏：数据源与项目筛选（规格 §6.1）。
+ * 来源/项目栏（规格 §6.1）。
  *
- * Phase 1 只做令牌化：字号提升到 12/13.5px、状态改用 StatusPill、
- * 底部数据源健康区用语义色表达，层级结构调整在 Phase 2。
+ * 结构：顶部「全部会话」→ 数据源（带专属标识与计数）→ 项目列表（可复制路径）→
+ * 底部数据源健康状态。空状态直接给出「扫描」与「打开设置」两个动作。
  */
+import { useState } from 'react'
+
 import { useLibrary } from '../../stores/library'
-import { StatusPill } from '../../components/ui'
+import { Button, IconButton, StatusPill } from '../../components/ui'
 import { baseName, formatRelative } from '../../lib/format'
 
 export function SourceSidebar() {
-  const { sources, projects, filter, setFilter, stats } = useLibrary()
+  const { sources, projects, filter, setFilter, stats, scan, scanning } = useLibrary()
+  const [copied, setCopied] = useState<string | null>(null)
 
   const sourceRow = (id: string) => sources.find((s) => s.id === id)
+
+  /** 复制项目路径（失败时静默，避免打断浏览）。 */
+  const copyPath = (path: string) => {
+    void navigator.clipboard?.writeText(path).then(() => {
+      setCopied(path)
+      window.setTimeout(() => setCopied((value) => (value === path ? null : value)), 1200)
+    })
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-panel">
@@ -44,7 +55,9 @@ export function SourceSidebar() {
               onClick={() => setFilter({ source: id, projectPath: null, onlyArchived: false })}
               title={row?.rootPath ?? '未探测到目录'}
               className={`flex w-full items-center justify-between rounded-control px-2 py-1.5 text-left text-body transition-colors ${
-                active ? 'bg-selected font-medium text-ink' : 'text-ink-muted hover:bg-hover hover:text-ink'
+                active
+                  ? 'bg-selected font-medium text-ink'
+                  : 'text-ink-muted hover:bg-hover hover:text-ink'
               }`}
             >
               <span className="flex min-w-0 items-center gap-1.5">
@@ -64,39 +77,62 @@ export function SourceSidebar() {
       {/* 项目 */}
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="flex items-center justify-between px-3.5 pb-1 pt-2.5">
-          <span className="text-meta font-semibold uppercase tracking-wide text-ink-muted">项目</span>
+          <span className="text-meta font-semibold uppercase tracking-wide text-ink-muted">
+            项目
+          </span>
           <span className="text-meta tabular-nums text-ink-muted">{projects.length}</span>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
           {projects.length === 0 ? (
-            <div className="px-1.5 py-2 text-meta leading-5 text-ink-muted">
-              还没有项目。点击顶部「扫描」发现本机会话历史。
+            <div className="flex flex-col items-start gap-2 px-1.5 py-2">
+              <p className="text-meta leading-5 text-ink-muted">
+                还没有项目。扫描本机 Codex / Kimi Code 会话后，这里会按项目分组。
+              </p>
+              <Button size="sm" tone="primary" onClick={() => void scan(false)} loading={scanning}>
+                扫描
+              </Button>
+              <Button size="sm" tone="ghost" onClick={() => useLibrary.getState().setPage('settings')}>
+                打开设置
+              </Button>
             </div>
           ) : (
             projects.map((project) => {
               const active = filter.projectPath === project.projectPath
               return (
-                <button
+                <div
                   key={project.projectPath}
-                  type="button"
-                  title={project.projectPath}
-                  aria-current={active ? 'true' : undefined}
-                  onClick={() =>
-                    setFilter({
-                      projectPath: active ? null : project.projectPath,
-                      source: null,
-                      onlyArchived: false,
-                    })
-                  }
-                  className={`flex w-full items-center justify-between rounded-control px-2 py-1.5 text-left text-body transition-colors ${
-                    active ? 'bg-selected font-medium text-ink' : 'text-ink-muted hover:bg-hover hover:text-ink'
+                  className={`group flex items-center gap-1 rounded-control pr-1 transition-colors ${
+                    active ? 'bg-selected' : 'hover:bg-hover'
                   }`}
                 >
-                  <span className="truncate">{project.name || baseName(project.projectPath)}</span>
-                  <span className="shrink-0 text-meta tabular-nums text-ink-muted">
-                    {project.sessionCount}
-                  </span>
-                </button>
+                  <button
+                    type="button"
+                    title={project.projectPath}
+                    aria-current={active ? 'true' : undefined}
+                    onClick={() =>
+                      setFilter({
+                        projectPath: active ? null : project.projectPath,
+                        source: null,
+                        onlyArchived: false,
+                      })
+                    }
+                    className={`flex min-w-0 flex-1 items-center justify-between px-2 py-1.5 text-left text-body ${
+                      active ? 'font-medium text-ink' : 'text-ink-muted hover:text-ink'
+                    }`}
+                  >
+                    <span className="truncate">{project.name || baseName(project.projectPath)}</span>
+                    <span className="shrink-0 pl-2 text-meta tabular-nums text-ink-muted">
+                      {project.sessionCount}
+                    </span>
+                  </button>
+                  <IconButton
+                    label={copied === project.projectPath ? '已复制路径' : '复制项目路径'}
+                    size="sm"
+                    onClick={() => copyPath(project.projectPath)}
+                  >
+                    <span aria-hidden="true">{copied === project.projectPath ? '✓' : '⧉'}</span>
+                  </IconButton>
+                </div>
               )
             })
           )}
@@ -122,7 +158,9 @@ export function SourceSidebar() {
         {filter.projectPath ? (
           <div className="pt-1.5 text-meta text-ink-muted">
             最近更新：
-            {formatRelative(projects.find((p) => p.projectPath === filter.projectPath)?.lastUpdated)}
+            {formatRelative(
+              projects.find((p) => p.projectPath === filter.projectPath)?.lastUpdated,
+            )}
           </div>
         ) : null}
         <div className="flex flex-wrap gap-1 pt-2">

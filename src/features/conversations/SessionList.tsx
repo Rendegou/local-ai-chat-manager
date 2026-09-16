@@ -10,7 +10,7 @@
 import { useMemo } from 'react'
 
 import { useVirtual } from '../../hooks/useVirtual'
-import { dateGroupLabel, formatRelative, sourceLabel } from '../../lib/format'
+import { dateGroupLabel, formatRelative, sourceLabel, syncStatusLabel } from '../../lib/format'
 import { useLibrary } from '../../stores/library'
 import type { SessionSummary } from '../../types/ipc'
 import { EmptyState, StatusPill } from '../../components/ui'
@@ -19,6 +19,14 @@ import { EmptyState, StatusPill } from '../../components/ui'
 type Row =
   | { type: 'group'; label: string }
   | { type: 'session'; session: SessionSummary; index: number }
+
+/** 同步状态 → 语义语气（仅用于「非仅本机」的会话）。 */
+const SYNC_TONE: Record<string, 'success' | 'warning' | 'info' | 'neutral'> = {
+  synced: 'success',
+  modified: 'warning',
+  remote: 'info',
+  archived: 'neutral',
+}
 
 /** 行高：分组 30px（sticky 头），会话 56px（两层信息）。 */
 const GROUP_HEIGHT = 30
@@ -154,6 +162,12 @@ function SessionRow({
           </StatusPill>
         ) : null}
         {session.archived ? <StatusPill tone="neutral">已归档</StatusPill> : null}
+        {/* 只有「非仅本机」的会话才额外标注同步状态，避免每行都是噪声 */}
+        {!session.archived && session.syncStatus !== 'local' ? (
+          <StatusPill tone={SYNC_TONE[session.syncStatus] ?? 'neutral'}>
+            {syncStatusLabel(session.syncStatus)}
+          </StatusPill>
+        ) : null}
       </div>
       <div className="flex items-center gap-2 pl-2 text-meta text-ink-muted">
         <span className={`shrink-0 ${session.source === 'kimi' ? 'text-kimi' : 'text-codex'}`}>

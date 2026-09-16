@@ -149,3 +149,21 @@ export function syncStatusLabel(status: string): string {
       return status
   }
 }
+
+/**
+ * 把当前筛选条件描述成一句话（规格 §5.2：窄窗口下工具栏必须保留筛选摘要）。
+ */
+export function describeFilter(filter: {
+  source?: string | null
+  projectPath?: string | null
+  onlyArchived?: boolean
+  from?: string | null
+  to?: string | null
+}): string {
+  const parts: string[] = []
+  if (filter.projectPath) parts.push(baseName(filter.projectPath) || filter.projectPath)
+  if (filter.source) parts.push(sourceLabel(filter.source))
+  if (filter.from || filter.to) parts.push(`${filter.from ?? ''}~${filter.to ?? ''}`)
+  if (filter.onlyArchived) parts.push('已归档')
+  return parts.length === 0 ? '全部会话' : parts.join(' · ')
+}

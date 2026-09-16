@@ -351,6 +351,33 @@ async function main() {
                 button?.click()
               }, NAV_LABEL[page])
             }
+            if (state === 'drawer') {
+              // 窄窗口：点开工具栏的「筛选」按钮，验证抽屉方案
+              await tab.evaluate(() => {
+                const button = [...document.querySelectorAll('button')]
+                  .find((b) => (b.textContent ?? '').includes('筛选'))
+                button?.click()
+              })
+              await new Promise((r) => setTimeout(r, 400))
+            }
+            if (state === 'more') {
+              // 打开工具栏「更多操作」菜单（overlay 表面 + 阴影）
+              await tab.evaluate(() => {
+                const button = document.querySelector('button[aria-haspopup="menu"]')
+                button?.click()
+              })
+              await new Promise((r) => setTimeout(r, 400))
+            }
+            if (state === 'detail') {
+              // 两级视图：点第一条会话，验证「列表 → 详情 → 返回」
+              await tab.evaluate(() => {
+                // 会话行是列表里唯一的固定行高按钮（不依赖是否已选中）
+                const row = [...document.querySelectorAll('button')]
+                  .find((b) => (b.className || '').includes('h-[56px]'))
+                row?.click()
+              })
+              await new Promise((r) => setTimeout(r, 600))
+            }
             if (state === 'focus') {
               // 键盘焦点状态：连按 Tab，验证焦点环清晰可见（Phase 1 验收项）
               for (let i = 0; i < 6; i += 1) {
