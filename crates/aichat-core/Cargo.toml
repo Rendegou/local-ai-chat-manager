@@ -1,0 +1,34 @@
+[package]
+name = "aichat-core"
+description = "Local AI Chat Manager 核心库：会话发现、流式解析、SQLite+FTS5 索引、Git 快照同步、zstd 归档"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "aichat_core"
+path = "src/lib.rs"
+
+# 命令行工具：用于本机自检（detect / scan / search / sync），也是真实数据验证入口
+[[bin]]
+name = "aichat-cli"
+path = "src/bin/aichat_cli.rs"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+rusqlite.workspace = true
+blake3.workspace = true
+walkdir.workspace = true
+notify.workspace = true
+tracing.workspace = true
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+zstd.workspace = true
+flate2.workspace = true
+tar.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+# CLI 的 bench 子命令需要临时目录（dev-dependencies 对 bin 不可用）
+tempfile = "3"
+

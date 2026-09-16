@@ -1,0 +1,16 @@
+{"type": "metadata", "protocol_version": 1, "created_at": "2026-09-15T10:00:00Z"}
+{"type": "profile.bind", "agentId": "main", "modelAlias": "kimi-k2", "profileName": "default"}
+{"type": "prompt.accepted", "agentId": "main", "promptId": "p1", "content": "帮我看看 Redis TTL lazy deletion 有没有问题", "time": "2026-09-15T10:00:01Z"}
+{"type": "turn.prompt", "agentId": "main", "input": "帮我看看 Redis TTL lazy deletion 有没有问题", "origin": "user", "promptId": "p1", "time": "2026-09-15T10:00:01Z"}
+{"type": "context.append_loop_event", "agentId": "main", "time": "2026-09-15T10:00:02Z", "event": {"type": "step.begin", "uuid": "u1", "turnId": "t1", "step": 1}}
+{"type": "context.append_loop_event", "agentId": "main", "time": "2026-09-15T10:00:02Z", "event": {"type": "content.part", "uuid": "u2", "turnId": "t1", "step": 1, "stepUuid": "s1", "part": {"type": "think", "text": "先确认 TTL 的续期时机"}}}
+{"type": "context.append_loop_event", "agentId": "main", "time": "2026-09-15T10:00:03Z", "event": {"type": "content.part", "uuid": "u3", "turnId": "t1", "step": 1, "stepUuid": "s1", "part": {"type": "text", "text": "我看了 Redisson 的 watchdog 逻辑："}}}
+{"type": "context.append_loop_event", "agentId": "main", "time": "2026-09-15T10:00:03Z", "event": {"type": "content.part", "uuid": "u4", "turnId": "t1", "step": 1, "stepUuid": "s1", "part": {"type": "text", "text": "续期失败会让 key 被 lazy deletion 提前删除。"}}}
+{"type": "context.append_loop_event", "agentId": "main", "time": "2026-09-15T10:00:04Z", "event": {"type": "tool.call", "uuid": "u5", "turnId": "t1", "step": 1, "stepUuid": "s1", "toolCallId": "call_1", "name": "read_file", "args": {"path": "/home/user/projects/demo-project/src/cache.rs"}}}
+{"type": "context.append_loop_event", "agentId": "main", "time": "2026-09-15T10:00:05Z", "event": {"type": "tool.result", "parentUuid": "u5", "toolCallId": "call_1", "result": {"content": [{"type": "text", "text": "fn renew(&self) { /* ... */ }"}]}}}
+{"type": "context.append_loop_event", "agentId": "main", "time": "2026-09-15T10:00:06Z", "event": {"type": "step.end", "uuid": "u6", "turnId": "t1", "step": 1, "finishReason": "stop"}}
+{"type": "context.append_message", "agentId": "main", "time": "2026-09-15T10:00:07Z", "message": {"role": "user", "id": "m1", "origin": "user", "content": [{"type": "text", "text": "按 10 秒续期改一下"}]}}
+{"type": "usage.record", "agentId": "main", "model": "kimi-k2", "usage": {"input": 1200, "output": 300}}
+{"type": "token_counting.measured", "agentId": "main", "length": 1500, "tokens": 640}
+{"type": "brand.new.event", "agentId": "main", "payload": {"x": 1}, "time": "2026-09-15T10:00:08Z"}
+{"type": "turn.ended", "agentId": "main", "turnId": "t1", "reason": "completed", "durationMs": 8000}

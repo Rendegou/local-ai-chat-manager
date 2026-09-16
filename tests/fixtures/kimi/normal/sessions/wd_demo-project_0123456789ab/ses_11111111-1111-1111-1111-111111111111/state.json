@@ -1,0 +1,19 @@
+{
+ "id": "ses_11111111-1111-1111-1111-111111111111",
+ "version": 1,
+ "cwd": "/home/user/projects/demo-project",
+ "createdAt": 1757937000000,
+ "updatedAt": 1757937600000,
+ "archived": false,
+ "title": "实现 Redis TTL lazy deletion",
+ "titleKind": "auto",
+ "lastTurnReason": "completed",
+ "isCustomTitle": false,
+ "agents": {
+  "main": {
+   "homedir": "/home/user",
+   "type": "main"
+  }
+ },
+ "lastPrompt": "(fixture 不保留用户原文)"
+}

@@ -1,0 +1,3 @@
+{"type": "prompt.accepted", "agentId": "main", "promptId": "p1", "content": "第一句正常内容"}
+{"type": "prompt.accepted", "agentId": "main", "content": "这一行缺少右括号"
+{"type": "prompt.accepted", "agentId": "main", "promptId": "p2", "content": "第二句正常内容"}

@@ -1,0 +1,1 @@
+{"default":{"identifier":"default","description":"主窗口默认权限：仅开放核心能力、目录选择与打开文件（最小权限原则）","local":true,"windows":["main"],"permissions":["core:default","dialog:default","opener:default"]}}

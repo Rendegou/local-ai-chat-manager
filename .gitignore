@@ -1,0 +1,18 @@
+# Rust 构建产物
+target/
+
+# 前端
+node_modules/
+dist/
+
+# 本地验证用索引（可删除，用 aichat-cli 重建）
+.verify/
+.bench/
+.bench-session/
+
+# 应用图标源文件（由 tools/make_icon.py 生成）
+app-icon.png
+
+# 调试截图（临时产物）
+.screenshot.png
+.shot-*.png

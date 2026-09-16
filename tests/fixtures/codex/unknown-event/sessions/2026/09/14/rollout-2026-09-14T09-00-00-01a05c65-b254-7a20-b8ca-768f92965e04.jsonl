@@ -1,0 +1,5 @@
+{"timestamp": "2026-09-14T09:00:00.000000Z", "ordinal": 0, "type": "session_meta", "payload": {"session_id": "01a05c65-b254-7a20-b8ca-768f92965e04", "cwd": "/home/user/projects/legacy", "cli_version": "0.9.0"}}
+{"timestamp": "2026-09-14T09:00:01.000000Z", "ordinal": 1, "type": "response_item"
+{"timestamp": "2026-09-14T09:00:02.000000Z", "ordinal": 2, "type": "response_item", "payload": {"type": "message", "id": "m1", "role": "user", "content": [{"type": "input_text", "text": "旧版本 schema 的会话"}]}}
+{"timestamp": "2026-09-14T09:00:03.000000Z", "ordinal": 3, "type": "future_event_type", "payload": {"hello": "world"}}
+{"timestamp": "2026-09-14T09:00:04.000000Z", "ordinal": 4, "type": "response_item", "payload": {"type": "message", "id": "m2", "role": "assistant", "content": [{"type": "output_text", "text": "仍然能读到这条回答。"}]}}

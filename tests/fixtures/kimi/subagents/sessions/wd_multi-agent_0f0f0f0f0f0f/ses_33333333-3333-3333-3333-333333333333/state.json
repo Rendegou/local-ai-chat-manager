@@ -1,0 +1,1 @@
+{"id": "ses_33333333-3333-3333-3333-333333333333", "version": 1, "cwd": "/home/user/projects/multi-agent", "createdAt": 1757937000000, "updatedAt": 1757937600000, "title": "带子 Agent 的会话", "agents": {"main": {"type": "main"}, "agent-abc": {"type": "sub"}}}
