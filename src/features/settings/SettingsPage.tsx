@@ -204,9 +204,7 @@ export function SettingsPage() {
                 <Select
                   {...props}
                   value={draft.archiveCompression}
-                  onChange={(event) =>
-                    patch({ archiveCompression: event.target.value as 'zstd' | 'gzip' })
-                  }
+                  onChange={(value) => patch({ archiveCompression: value as 'zstd' | 'gzip' })}
                   options={[
                     { value: 'zstd', label: 'zstd（推荐：压缩快、解压更快）' },
                     { value: 'gzip', label: 'gzip（兼容性兜底）' },
@@ -269,9 +267,7 @@ export function SettingsPage() {
                 <Select
                   {...props}
                   value={draft.theme}
-                  onChange={(event) =>
-                    patch({ theme: event.target.value as 'system' | 'light' | 'dark' })
-                  }
+                  onChange={(value) => patch({ theme: value as 'system' | 'light' | 'dark' })}
                   options={[
                     { value: 'system', label: '跟随系统' },
                     { value: 'light', label: '浅色' },

@@ -10,9 +10,10 @@ export {
   Notice,
   Spinner,
   Skeleton,
+  Chip,
   type Tone,
 } from './Status'
 export { PanelHeader, SectionCard, FormField, Field, EmptyState } from './Surfaces'
-export { TextInput, Select, Toggle } from './Inputs'
+export { TextInput, DateInput, Select, Toggle, DirectoryInput, type SelectOption } from './Inputs'
 export { Menu, SegmentedNav, StatusArea, type MenuItem } from './Menu'
 export { Icon, Dot, type IconName } from './Icon'

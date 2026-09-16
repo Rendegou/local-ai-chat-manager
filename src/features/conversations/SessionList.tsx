@@ -181,3 +181,6 @@ function SessionRow({
     </button>
   )
 }
+
+/* 组件画廊（?gallery）需要单独陈列这个页面级组件 */
+export { SessionRow }

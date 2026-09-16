@@ -31,13 +31,11 @@ export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement
 /** 语气 → 类名。 */
 const TONE: Record<ButtonTone, string> = {
   // 主按钮：accent 渐变 + 顶内高光 + 柔和投影（唯一允许「浮起」的按钮）
-  primary:
-    'btn-primary text-accent-ink border border-transparent hover:brightness-105 active:brightness-95',
-  // 次按钮：升一级的表面 + 细边 + 轻投影（声明一次 elevation）
-  secondary:
-    'bg-overlay text-ink border border-line shadow-panel hover:border-line-strong active:bg-hover',
-  ghost: 'bg-transparent text-ink-muted border border-transparent hover:bg-hover hover:text-ink',
-  danger: 'bg-transparent text-danger border border-danger/45 hover:bg-danger/12 active:bg-danger/18',
+  primary: 'btn-primary text-accent-ink hover:brightness-105 active:brightness-95',
+  // 次按钮：升一级表面 + inset ring + 轻投影（见 index.css .btn-secondary）
+  secondary: 'btn-secondary text-ink',
+  ghost: 'bg-transparent text-ink-muted hover:bg-hover hover:text-ink active:bg-selected',
+  danger: 'btn-danger',
 }
 
 /** 尺寸 → 类名。 */
@@ -63,7 +61,7 @@ export function Button({
       type={type}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-      className={`inline-flex shrink-0 items-center justify-center rounded-control font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${TONE[tone]} ${SIZE[size]} ${className}`}
+      className={`inline-flex shrink-0 items-center justify-center rounded-control font-medium transition-[color,background-color,box-shadow,filter] disabled:cursor-not-allowed disabled:opacity-45 ${TONE[tone]} ${SIZE[size]} ${className}`}
       {...rest}
     >
       {loading ? <Spinner size="sm" /> : icon}
@@ -101,7 +99,7 @@ export function IconButton({
       type={type}
       title={label}
       aria-label={label}
-      className={`inline-flex shrink-0 items-center justify-center rounded-control transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${TONE[tone]} ${box} ${className}`}
+      className={`inline-flex shrink-0 items-center justify-center rounded-control transition-[color,background-color,box-shadow,filter] disabled:cursor-not-allowed disabled:opacity-45 ${TONE[tone]} ${box} ${className}`}
       {...rest}
     >
       {children}

@@ -75,28 +75,33 @@ export function Menu({
         <div
           role="menu"
           aria-label={label}
-          className="absolute right-0 top-[calc(100%+6px)] z-30 min-w-[200px] animate-pop rounded-overlay border border-line bg-overlay py-1 shadow-overlay"
+          className="absolute right-0 top-[calc(100%+6px)] z-30 min-w-[200px] animate-pop rounded-overlay border border-line bg-overlay p-1 shadow-overlay"
         >
           {items.map((item, index) => (
-            <button
-              key={item.label}
-              ref={index === 0 ? firstItemRef : undefined}
-              type="button"
-              role="menuitem"
-              disabled={item.disabled}
-              onClick={() => {
-                setOpen(false)
-                item.onClick()
-              }}
-              className={`flex w-full items-center gap-3 px-3 py-1.5 text-left text-body transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
-                item.tone === 'danger'
-                  ? 'text-danger hover:bg-danger/12'
-                  : 'text-ink hover:bg-hover'
-              }`}
-            >
-              <span className="min-w-0 flex-1 truncate">{item.label}</span>
-              {item.hint ? <span className="text-meta text-ink-muted">{item.hint}</span> : null}
-            </button>
+            <div key={item.label}>
+              {/* 危险操作与普通操作之间加分隔线（防误触的物理分区） */}
+              {item.tone === 'danger' && index > 0 && items[index - 1]?.tone !== 'danger' ? (
+                <div aria-hidden="true" className="mx-1 my-1 border-t border-line" />
+              ) : null}
+              <button
+                ref={index === 0 ? firstItemRef : undefined}
+                type="button"
+                role="menuitem"
+                disabled={item.disabled}
+                onClick={() => {
+                  setOpen(false)
+                  item.onClick()
+                }}
+                className={`flex w-full items-center gap-3 rounded-control px-2.5 py-1.5 text-left text-body transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
+                  item.tone === 'danger'
+                    ? 'text-danger hover:bg-danger/12'
+                    : 'text-ink hover:bg-hover'
+                }`}
+              >
+                <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                {item.hint ? <span className="text-meta text-ink-muted">{item.hint}</span> : null}
+              </button>
+            </div>
           ))}
         </div>
       ) : null}
@@ -117,7 +122,7 @@ export function SegmentedNav({
   return (
     <nav
       aria-label="主导航"
-      className="flex items-center gap-0.5 rounded-panel border border-line bg-canvas p-[3px] shadow-sunken"
+      className="nav-track flex items-center gap-0.5 rounded-panel p-[3px]"
     >
       {items.map((item) => {
         const active = item.key === current
@@ -128,7 +133,7 @@ export function SegmentedNav({
             title={item.hint}
             aria-current={active ? 'page' : undefined}
             onClick={() => onSelect(item.key)}
-            className={`rounded-control px-3 py-1 text-body transition-colors ${
+            className={`rounded-control px-3 py-1 text-body transition-[color,background-color,box-shadow] ${
               active
                 ? 'bg-overlay font-medium text-ink shadow-panel'
                 : 'text-ink-muted hover:bg-hover hover:text-ink'

@@ -130,6 +130,37 @@ export function Spinner({ size = 'md', label }: { size?: 'sm' | 'md'; label?: st
   )
 }
 
+/**
+ * 可移除筛选片（搜索筛选区）。
+ *
+ * 整片即「移除」按钮：点击任意位置都移除该筛选，
+ * ✕ 图标只是示能，不是单独的点击目标。
+ */
+export function Chip({
+  onRemove,
+  children,
+}: {
+  onRemove: () => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onRemove}
+      aria-label={`移除筛选：${typeof children === 'string' ? children : ''}`}
+      title="移除此筛选"
+      className="group inline-flex h-6 shrink-0 items-center gap-1 rounded-control border border-line bg-canvas px-2 text-meta text-ink transition-colors hover:border-line-strong"
+    >
+      {children}
+      <Icon
+        name="close"
+        size={10}
+        className="text-ink-faint transition-colors group-hover:text-ink"
+      />
+    </button>
+  )
+}
+
 /** 骨架屏：数据未就绪时的稳定占位，避免整块空白跳动。 */
 export function Skeleton({
   className = '',

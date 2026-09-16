@@ -14,6 +14,8 @@ import { useLibrary } from '../../stores/library'
 import type { SearchResponse, SessionFilter } from '../../types/ipc'
 import {
   Button,
+  Chip,
+  DateInput,
   EmptyState,
   Icon,
   Notice,
@@ -22,6 +24,7 @@ import {
   Spinner,
   StatusPill,
   TextInput,
+  Toggle,
 } from '../../components/ui'
 
 /** 搜索页。 */
@@ -131,7 +134,7 @@ export function SearchPage() {
         actions={
           <Select
             value={order}
-            onChange={(event) => setOrder(event.target.value as 'relevance' | 'recent')}
+            onChange={(value) => setOrder(value as 'relevance' | 'recent')}
             aria-label="结果排序"
             options={[
               { value: 'relevance', label: '相关度' },
@@ -180,19 +183,15 @@ export function SearchPage() {
             <div className="flex flex-wrap items-center gap-1.5 pt-2.5">
               <span className="text-meta text-ink-muted">已启用：</span>
               {chips.map((chip) => (
-                <button
+                <Chip
                   key={chip.key}
-                  type="button"
-                  onClick={() => {
+                  onRemove={() => {
                     chip.clear()
                     setResponse(null)
                   }}
-                  title="移除此筛选"
-                  className="inline-flex items-center gap-1 rounded-control border border-line bg-canvas px-2 py-0.5 text-meta text-ink transition-colors hover:border-line-strong"
                 >
                   {chip.label}
-                  <Icon name="close" size={11} className="text-ink-muted" />
-                </button>
+                </Chip>
               ))}
               <Button tone="ghost" size="sm" onClick={clearFilters}>
                 清除全部
@@ -214,7 +213,7 @@ export function SearchPage() {
                   来源
                   <Select
                     value={source}
-                    onChange={(event) => setSource(event.target.value)}
+                    onChange={setSource}
                     options={[
                       { value: '', label: '全部数据源' },
                       { value: 'codex', label: 'Codex' },
@@ -226,7 +225,7 @@ export function SearchPage() {
                   项目
                   <Select
                     value={project}
-                    onChange={(event) => setProject(event.target.value)}
+                    onChange={setProject}
                     options={[
                       { value: '', label: '全部项目' },
                       ...projects.map((p) => ({
@@ -240,7 +239,7 @@ export function SearchPage() {
                   设备
                   <Select
                     value={machine}
-                    onChange={(event) => setMachine(event.target.value)}
+                    onChange={setMachine}
                     options={[
                       { value: '', label: '全部设备' },
                       ...machines.map((m) => ({ value: m, label: m.slice(0, 8) })),
@@ -250,34 +249,20 @@ export function SearchPage() {
                 <div className="flex items-end gap-2">
                   <label className="flex flex-1 flex-col gap-1 text-meta text-ink-muted">
                     起始
-                    <input
-                      type="date"
-                      value={from}
-                      onChange={(event) => setFrom(event.target.value)}
-                      className="rounded-control border border-line bg-panel px-2 py-1.5 text-body text-ink"
-                    />
+                    <DateInput value={from} onChange={(event) => setFrom(event.target.value)} />
                   </label>
                   <label className="flex flex-1 flex-col gap-1 text-meta text-ink-muted">
                     结束
-                    <input
-                      type="date"
-                      value={to}
-                      onChange={(event) => setTo(event.target.value)}
-                      className="rounded-control border border-line bg-panel px-2 py-1.5 text-body text-ink"
-                    />
+                    <DateInput value={to} onChange={(event) => setTo(event.target.value)} />
                   </label>
                 </div>
               </div>
               <div className="flex items-center justify-between pt-2.5">
-                <label className="flex items-center gap-1.5 text-meta text-ink-muted">
-                  <input
-                    type="checkbox"
-                    checked={messagesOnly}
-                    onChange={(event) => setMessagesOnly(event.target.checked)}
-                    className="h-4 w-4 accent-accent"
-                  />
-                  只搜对话正文（排除工具输出与事件）
-                </label>
+                <Toggle
+                  checked={messagesOnly}
+                  onChange={setMessagesOnly}
+                  label="只搜对话正文（排除工具输出与事件）"
+                />
                 <span className="text-meta text-ink-muted">已归档会话默认不参与搜索</span>
               </div>
             </div>
