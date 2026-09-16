@@ -33,6 +33,7 @@ function parseArgs(argv) {
     sizes: ['1440x900', '1180x800', '900x700'],
     pages: ['conversations', 'search', 'sync', 'settings'],
     states: ['normal'],
+    a11y: false,
   }
   for (let i = 0; i < argv.length; i += 1) {
     const key = argv[i]
@@ -47,6 +48,7 @@ function parseArgs(argv) {
       case 'sizes': args.sizes = value.split(','); break
       case 'pages': args.pages = value.split(','); break
       case 'states': args.states = value.split(','); break
+      case 'a11y': args.a11y = value === 'true'; break
       default: break
     }
   }
@@ -190,6 +192,111 @@ const PAGE_MOCK = String.raw`
 })();
 `
 
+
+/**
+ * 对比度审计：遍历可见文本，取计算样式与「有效背景」，按 WCAG 算对比度。
+ *
+ * 返回低于阈值的条目（正文 4.5:1，大字号 3:1）。用来把「浅色/深色都要达到 AA」
+ * 变成可执行的检查，而不是靠肉眼。
+ */
+const CONTRAST_AUDIT = () => {
+  // 用 1×1 canvas 把任意 CSS 颜色（oklch / color-mix / var 展开后的值）转成 sRGB 字节，
+  // 直接按字符串解析会踩到 `oklch(0.2 0.005 265)` 这类格式（数值含义与 rgb 完全不同）。
+  const canvas = document.createElement('canvas')
+  canvas.width = canvas.height = 1
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  const cache = new Map()
+  const parse = (color) => {
+    if (!color) return null
+    if (cache.has(color)) return cache.get(color)
+    ctx.clearRect(0, 0, 1, 1)
+    ctx.fillStyle = '#000'
+    ctx.fillStyle = color
+    ctx.fillRect(0, 0, 1, 1)
+    const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data
+    const value = { r, g, b, a: a / 255 }
+    cache.set(color, value)
+    return value
+  }
+  const luminance = ({ r, g, b }) => {
+    const channel = (v) => {
+      const s = v / 255
+      return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4)
+    }
+    return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+  }
+  const over = (fg, bg) => ({
+    r: fg.r * fg.a + bg.r * (1 - fg.a),
+    g: fg.g * fg.a + bg.g * (1 - fg.a),
+    b: fg.b * fg.a + bg.b * (1 - fg.a),
+    a: 1,
+  })
+  const effectiveBackground = (element) => {
+    // 收集从根到叶的背景层，然后自下而上合成 —— 顺序反了会算出完全错误的颜色
+    const layers = []
+    let node = element
+    while (node) {
+      const bg = parse(getComputedStyle(node).backgroundColor)
+      if (bg && bg.a > 0) layers.push(bg)
+      node = node.parentElement
+    }
+    layers.reverse()
+    let composed = layers.length > 0 ? layers[0] : { r: 255, g: 255, b: 255, a: 1 }
+    // 注意：不能因为某一层已经不透明就提前结束 —— 下面还有更靠前的层需要叠加
+    for (let i = 1; i < layers.length; i += 1) {
+      composed = over(layers[i], composed)
+    }
+    return composed
+  }
+  const results = []
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
+  const seen = new Set()
+  while (walker.nextNode()) {
+    const text = walker.currentNode.textContent?.trim()
+    if (!text) continue
+    const element = walker.currentNode.parentElement
+    if (!element || seen.has(element)) continue
+    seen.add(element)
+    const rect = element.getBoundingClientRect()
+    if (rect.width < 2 || rect.height < 2) continue
+    const style = getComputedStyle(element)
+    if (style.visibility === 'hidden' || style.display === 'none' || Number(style.opacity) < 0.3) continue
+    const fg = parse(style.color)
+    if (!fg) continue
+    const bg = effectiveBackground(element)
+    const composed = fg.a < 1 ? over(fg, bg) : fg
+    const l1 = luminance(composed)
+    const l2 = luminance(bg)
+    const ratio = (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05)
+    const size = Number.parseFloat(style.fontSize)
+    const weight = Number(style.fontWeight) || 400
+    const large = size >= 24 || (size >= 18.66 && weight >= 700)
+    const threshold = large ? 3 : 4.5
+    if (ratio + 0.01 < threshold) {
+      const chainRaw = []
+      {
+        let n = element
+        while (n) {
+          const raw = getComputedStyle(n).backgroundColor
+          if (raw !== 'rgba(0, 0, 0, 0)') chainRaw.push(`${n.tagName}:${raw}`)
+          n = n.parentElement
+        }
+      }
+      results.push({
+        chain: chainRaw.join(' | '),
+        text: text.slice(0, 40),
+        ratio: Math.round(ratio * 100) / 100,
+        threshold,
+        color: style.color,
+        bg: `rgb(${Math.round(bg.r)},${Math.round(bg.g)},${Math.round(bg.b)}) a=${bg.a.toFixed(2)}`,
+        size: Math.round(size * 10) / 10,
+        className: (element.className || '').toString().slice(0, 60),
+      })
+    }
+  }
+  return results
+}
+
 /** 生成注入脚本（替换占位符）。 */
 function injectionFor(mock, stateName, theme) {
   return PAGE_MOCK
@@ -222,6 +329,7 @@ async function main() {
   })
 
   const written = []
+  const findings = []
   try {
     for (const state of args.states) {
       for (const size of args.sizes) {
@@ -243,8 +351,21 @@ async function main() {
                 button?.click()
               }, NAV_LABEL[page])
             }
+            if (state === 'focus') {
+              // 键盘焦点状态：连按 Tab，验证焦点环清晰可见（Phase 1 验收项）
+              for (let i = 0; i < 6; i += 1) {
+                await tab.keyboard.press('Tab')
+                await new Promise((r) => setTimeout(r, 80))
+              }
+            }
             await new Promise((r) => setTimeout(r, 700))
             await tab.screenshot({ path: resolve(args.out, name) })
+            if (args.a11y && page === 'conversations' && size === args.sizes[0]) {
+              const issues = await tab.evaluate(CONTRAST_AUDIT)
+              for (const issue of issues) {
+                findings.push({ name, ...issue })
+              }
+            }
             await tab.close()
             written.push(name)
           }
@@ -255,6 +376,17 @@ async function main() {
     await browser.close()
   }
   console.log(`已生成 ${written.length} 张截图 → ${resolve(args.out)}`)
+  if (args.a11y) {
+    if (findings.length === 0) {
+      console.log('对比度审计：未发现低于 WCAG AA 阈值的文本 ✓')
+    } else {
+      console.log(`对比度审计：发现 ${findings.length} 处低于阈值`)
+      for (const issue of findings.slice(0, 25)) {
+        console.log(`  [${issue.name}] ${issue.ratio}:1 < ${issue.threshold}:1  ${issue.size}px  "${issue.text}"`)
+        console.log(`      color=${issue.color} bg=${issue.bg}`)
+      }
+    }
+  }
 }
 
 main().catch((error) => {

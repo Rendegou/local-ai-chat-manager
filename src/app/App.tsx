@@ -1,7 +1,8 @@
 /**
- * 应用外壳：顶部工具栏 + 左侧导航 + 页面切换 + 全局提示。
+ * 应用外壳：顶部工具栏 + 页面切换 + 全局状态提示。
  *
- * 视觉取向（规格 §19）：极简工具风，顶部一行放应用名、搜索入口与同步状态。
+ * Phase 1（设计基础层）只做令牌化与原语替换：结构、数据流、交互行为保持不变。
+ * 工具栏的信息优先级重组放到 Phase 2。
  */
 import { useEffect } from 'react'
 
@@ -12,7 +13,7 @@ import { ConversationsPage } from '../features/conversations/ConversationsPage'
 import { SearchPage } from '../features/search/SearchPage'
 import { SyncPage } from '../features/sync/SyncPage'
 import { SettingsPage } from '../features/settings/SettingsPage'
-import { Badge, Button, Spinner } from '../components/ui'
+import { Button, IconButton, Notice, Spinner, StatusPill } from '../components/ui'
 import { formatRelative } from '../lib/format'
 
 /** 导航项。 */
@@ -81,27 +82,28 @@ export default function App() {
   const missingSources = sources.filter((source) => !source.found)
 
   return (
-    <div className="flex h-full flex-col bg-surface text-ink">
+    <div className="flex h-full flex-col bg-canvas text-ink">
       {/* 顶部工具栏 */}
-      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-line px-3">
-        <div className="flex items-baseline gap-2">
-          <span className="text-[13px] font-semibold">Local Chats</span>
-          <span className="text-[11px] text-ink-faint">
+      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-line bg-panel px-3.5">
+        <div className="flex items-baseline gap-2.5">
+          <span className="text-title text-ink">Local Chats</span>
+          <span className="text-meta text-ink-muted">
             {stats ? `${stats.sessions} 会话 · ${stats.messages} 消息` : '索引未就绪'}
           </span>
         </div>
 
-        <nav className="flex items-center gap-0.5 pl-2">
+        <nav aria-label="主导航" className="flex items-center gap-0.5 pl-2">
           {NAV.map((item) => (
             <button
               key={item.key}
               type="button"
               title={item.hint}
+              aria-current={page === item.key ? 'page' : undefined}
               onClick={() => setPage(item.key)}
-              className={`rounded-md px-2.5 py-1.5 text-[12px] transition-colors ${
+              className={`rounded-control px-2.5 py-1.5 text-body transition-colors ${
                 page === item.key
-                  ? 'bg-surface-sunken font-medium text-ink'
-                  : 'text-ink-muted hover:bg-surface-sunken'
+                  ? 'bg-selected font-medium text-ink'
+                  : 'text-ink-muted hover:bg-hover hover:text-ink'
               }`}
             >
               {item.label}
@@ -112,30 +114,28 @@ export default function App() {
         <div className="ml-auto flex items-center gap-2">
           {scanning ? (
             <Spinner
-              label={
-                scanProgress ? `扫描 ${scanProgress.done}/${scanProgress.total}` : '扫描中…'
-              }
+              label={scanProgress ? `扫描 ${scanProgress.done}/${scanProgress.total}` : '扫描中…'}
             />
           ) : null}
           {missingSources.length > 0 ? (
-            <Badge tone="warn" title="未探测到数据目录，可在设置中手工指定">
+            <StatusPill tone="warning" title="未探测到数据目录，可在设置中手工指定">
               {missingSources.length} 个数据源未找到
-            </Badge>
+            </StatusPill>
           ) : null}
-          <Badge
-            tone={syncStatus?.conflict ? 'warn' : 'muted'}
+          <StatusPill
+            tone={syncStatus?.conflict ? 'danger' : syncStatus?.isRepo ? 'success' : 'neutral'}
             title={syncStatus?.conflict ? '存在同步冲突' : '同步状态'}
           >
             {syncStatus?.conflict
-              ? '冲突'
+              ? '同步冲突'
               : syncStatus?.isRepo
-                ? `同步 ${formatRelative(syncStatus.lastPush ?? syncStatus.lastPull)}`
+                ? `已同步 ${formatRelative(syncStatus.lastPush ?? syncStatus.lastPull)}`
                 : '未配置同步'}
-          </Badge>
-          <Button variant="ghost" onClick={() => setPage('search')} title="全文搜索">
-            搜索
-          </Button>
-          <Button variant="primary" onClick={() => void scan(false)} disabled={scanning}>
+          </StatusPill>
+          <IconButton label="搜索会话内容" onClick={() => setPage('search')}>
+            <span aria-hidden="true">⌕</span>
+          </IconButton>
+          <Button tone="primary" onClick={() => void scan(false)} loading={scanning}>
             {scanning ? '扫描中' : '扫描'}
           </Button>
         </div>
@@ -149,16 +149,23 @@ export default function App() {
         {page === 'settings' ? <SettingsPage /> : null}
       </main>
 
-      {/* 错误提示条（结构化错误的人话信息） */}
+      {/* 错误提示：保留到用户关闭（失败反馈不应自动消失） */}
       {error ? (
-        <div className="flex items-center gap-2 border-t border-line bg-red-500/10 px-3 py-2 text-[12px] text-red-600 dark:text-red-400">
-          <span className="truncate">{error.message}</span>
-          <span className="ml-auto shrink-0 font-mono text-[10.5px] text-ink-faint">
-            {error.kind}
-          </span>
-          <Button variant="ghost" onClick={() => setError(null)}>
-            关闭
-          </Button>
+        <div className="border-t border-line bg-canvas p-2">
+          <Notice
+            tone="danger"
+            title={error.message}
+            actions={
+              <>
+                <span className="text-tech text-ink-faint">{error.kind}</span>
+                <Button tone="ghost" size="sm" onClick={() => setError(null)}>
+                  关闭
+                </Button>
+              </>
+            }
+          >
+            {error.detail ? <span className="text-tech">{error.detail}</span> : null}
+          </Notice>
         </div>
       ) : null}
     </div>

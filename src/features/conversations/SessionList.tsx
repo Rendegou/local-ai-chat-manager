@@ -1,33 +1,32 @@
 /**
- * 会话列表（中栏）：按日期分组 + 虚拟滚动（规格 §22：不渲染上万个 DOM 节点）。
+ * 会话列表（中栏）。
+ *
+ * Phase 1 令牌化要点（规格 §3.2 / §6.1）：
+ * - 标题提升到 13.5–14px，元数据统一 12px，不再出现 10.5px；
+ * - 每行收敛为「标题 + 一行来源/项目/时间」两层，消息数与设备降到次级；
+ * - 选中态用背景 + 焦点环 + 文字色，不只靠蓝点；
+ * - 日期分组标题改为 sticky，但降低装饰感。
  */
 import { useMemo } from 'react'
 
 import { useVirtual } from '../../hooks/useVirtual'
-import { dateGroupLabel, formatRelative, sourceLabel, syncStatusLabel } from '../../lib/format'
+import { dateGroupLabel, formatRelative, sourceLabel } from '../../lib/format'
 import { useLibrary } from '../../stores/library'
 import type { SessionSummary } from '../../types/ipc'
-import { Badge, EmptyState, Spinner } from '../../components/ui'
+import { EmptyState, StatusPill } from '../../components/ui'
 
 /** 列表行：分组标题或会话行。 */
 type Row =
   | { type: 'group'; label: string }
   | { type: 'session'; session: SessionSummary; index: number }
 
-/** 行高：分组 26px，会话 58px。 */
-const GROUP_HEIGHT = 26
-const SESSION_HEIGHT = 58
+/** 行高：分组 30px（sticky 头），会话 56px（两层信息）。 */
+const GROUP_HEIGHT = 30
+const SESSION_HEIGHT = 56
 
 export function SessionList() {
-  const {
-    sessions,
-    total,
-    loadingSessions,
-    selectedId,
-    selectSession,
-    loadSessions,
-    filter,
-  } = useLibrary()
+  const { sessions, total, loadingSessions, selectedId, selectSession, loadSessions, filter } =
+    useLibrary()
 
   // 扁平化：日期分组 + 会话行（虚拟列表只认一维下标）
   const rows = useMemo(() => {
@@ -58,14 +57,13 @@ export function SessionList() {
 
   return (
     <>
-      <div className="flex h-11 shrink-0 items-center justify-between border-b border-line px-3">
+      <div className="flex h-10 shrink-0 items-center justify-between border-b border-line bg-panel px-3.5">
         <div className="flex items-baseline gap-2">
-          <span className="text-[12.5px] font-semibold">会话</span>
-          <span className="text-[11.5px] text-ink-faint">
+          <span className="text-lead text-ink">会话</span>
+          <span className="text-meta tabular-nums text-ink-muted">
             {sessions.length}/{total}
           </span>
         </div>
-        {loadingSessions ? <Spinner /> : null}
       </div>
 
       {rows.length === 0 ? (
@@ -74,7 +72,7 @@ export function SessionList() {
           description="点击顶部「扫描」发现本机 Codex / Kimi Code 会话；若未探测到目录，可在设置中手工指定。"
         />
       ) : (
-        <div ref={virtual.containerRef} className="min-h-0 flex-1 overflow-y-auto">
+        <div ref={virtual.containerRef} className="min-h-0 flex-1 overflow-y-auto bg-panel">
           <div style={{ height: virtual.totalSize, position: 'relative' }}>
             {virtual.items.map((item) => {
               const row = rows[item.index]
@@ -92,7 +90,7 @@ export function SessionList() {
                   }}
                 >
                   {row.type === 'group' ? (
-                    <div className="flex h-[26px] items-center bg-surface px-3 text-[10.5px] font-semibold uppercase tracking-wide text-ink-faint">
+                    <div className="sticky top-0 flex h-[30px] items-center bg-panel px-3.5 text-meta font-semibold text-ink-muted">
                       {row.label}
                     </div>
                   ) : (
@@ -110,7 +108,7 @@ export function SessionList() {
       )}
 
       {filter.onlyArchived ? (
-        <div className="border-t border-line px-3 py-1.5 text-[11px] text-ink-faint">
+        <div className="border-t border-line px-3.5 py-1.5 text-meta text-ink-muted">
           正在查看已归档会话
         </div>
       ) : null}
@@ -118,7 +116,12 @@ export function SessionList() {
   )
 }
 
-/** 单条会话：标题 + 元信息（数据源 / 项目 / 机器 / 时间）。 */
+/**
+ * 单条会话：**两层信息**（规格 §6.1）——标题；来源 / 项目 / 时间。
+ *
+ * 消息数与设备压缩到第二行的右侧，避免每行堆三层小字。
+ * 选中态同时给出背景、左侧强调条与文字颜色，色盲与灰度下也能分辨。
+ */
 function SessionRow({
   session,
   active,
@@ -132,29 +135,34 @@ function SessionRow({
     <button
       type="button"
       onClick={onClick}
-      className={`flex h-[58px] w-full flex-col justify-center gap-1 border-b border-line/60 px-3 text-left hover:bg-surface-sunken ${
-        active ? 'bg-surface-sunken' : ''
+      aria-current={active ? 'true' : undefined}
+      className={`flex h-[56px] w-full flex-col justify-center gap-1 border-b border-line/60 px-3.5 text-left transition-colors ${
+        active ? 'bg-selected' : 'hover:bg-hover'
       }`}
     >
       <div className="flex items-center gap-1.5">
         <span
-          className={`h-1.5 w-1.5 shrink-0 rounded-full ${active ? 'bg-accent-500' : 'bg-transparent'}`}
+          aria-hidden="true"
+          className={`h-3.5 w-0.5 shrink-0 rounded-full ${active ? 'bg-accent' : 'bg-transparent'}`}
         />
-        <span className="truncate text-[12.5px] font-medium text-ink">
+        <span className="truncate text-body font-medium text-ink">
           {session.title ?? '无标题'}
         </span>
-        {session.partial ? <Badge tone="warn" title="存在未识别事件或损坏行">部分</Badge> : null}
-        {session.archived ? <Badge tone="muted">已归档</Badge> : null}
+        {session.partial ? (
+          <StatusPill tone="warning" title="存在未识别事件或损坏行">
+            部分
+          </StatusPill>
+        ) : null}
+        {session.archived ? <StatusPill tone="neutral">已归档</StatusPill> : null}
       </div>
-      <div className="flex items-center gap-2 pl-3 text-[11px] text-ink-faint">
-        <span>{sourceLabel(session.source)}</span>
+      <div className="flex items-center gap-2 pl-2 text-meta text-ink-muted">
+        <span className={`shrink-0 ${session.source === 'kimi' ? 'text-kimi' : 'text-codex'}`}>
+          {sourceLabel(session.source)}
+        </span>
         <span className="truncate">{session.projectPath ?? '未知项目'}</span>
-        <span className="ml-auto shrink-0">{formatRelative(session.updatedAt)}</span>
-      </div>
-      <div className="flex items-center gap-2 pl-3 text-[10.5px] text-ink-faint">
-        <span>{session.messageCount} 条消息</span>
-        <span>{syncStatusLabel(session.syncStatus)}</span>
-        {session.machineId ? <span className="truncate">{session.machineId.slice(0, 8)}</span> : null}
+        <span className="ml-auto shrink-0 tabular-nums">
+          {session.messageCount} 条 · {formatRelative(session.updatedAt)}
+        </span>
       </div>
     </button>
   )

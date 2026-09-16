@@ -1,6 +1,7 @@
 /**
- * 会话页（规格 §19 Conversations）：
- * 左：数据源 + 项目筛选；中：会话列表（虚拟滚动）；右：会话内容（虚拟滚动 + 分页加载）。
+ * 会话页（规格 §6.1）：来源/项目栏 + 会话列表 + 会话正文。
+ *
+ * Phase 1 只替换表面令牌；响应式（抽屉 / 两级视图）在 Phase 2 处理。
  */
 import { useEffect } from 'react'
 
@@ -21,13 +22,13 @@ export function ConversationsPage() {
   }, [page, selectedId, sessions, selectSession])
 
   return (
-    <div className="flex min-h-0 flex-1">
+    <div className="flex min-h-0 flex-1 bg-canvas">
       {/* 左侧：数据源 / 项目 */}
-      <aside className="hidden w-56 shrink-0 flex-col border-r border-line bg-surface-sunken lg:flex">
+      <aside className="hidden w-56 shrink-0 border-r border-line lg:flex lg:flex-col">
         <SourceSidebar />
       </aside>
       {/* 中间：会话列表 */}
-      <section className="flex w-[340px] shrink-0 flex-col border-r border-line">
+      <section className="flex w-[350px] shrink-0 flex-col border-r border-line bg-panel">
         <SessionList />
       </section>
       {/* 右侧：会话内容 */}

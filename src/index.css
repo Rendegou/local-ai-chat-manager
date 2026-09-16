@@ -1,8 +1,14 @@
 /**
- * 全局样式（Tailwind v4）。
+ * 全局样式与设计令牌（docs/FRONTEND_VISUAL_REDESIGN.md §4）
  *
- * 设计取向（规格 §19）：极简、信息密度高、无渐变、无巨大 KPI 卡片，
- * 视觉参照 Linear / GitHub Desktop / VS Code 工具面板。
+ * 设计取向：安静的本地档案工作台 —— 可信、安静、精确、有层次，不做 AI 套模板的视觉。
+ *
+ * 三条硬规则（后续所有页面都必须遵守）：
+ * 1. 表面分层：canvas（最底） < panel（来源栏/列表） < reading（正文） < overlay（浮层）；
+ *    分组优先用背景差异与间距，边框只用于真实边界。
+ * 2. 字号下限：正文与控件 ≥ 13.5px，元数据 12px，仅路径/序号等技术标识允许 11px mono。
+ *    核心路径、同步状态、错误原因不得使用最低字号或最低对比度。
+ * 3. 状态不靠颜色单独表达：每种语义同时带图标或文字（见 components/ui/Status.tsx）。
  */
 @import 'tailwindcss';
 
@@ -10,47 +16,115 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  /* 单一强调色，避免花哨渐变 */
-  --color-accent-400: oklch(0.72 0.13 250);
-  --color-accent-500: oklch(0.62 0.15 250);
-  --color-accent-600: oklch(0.54 0.15 250);
+  /* ---------- 表面（四层，深色用石墨灰、浅色用略暖中性，禁止机械反色）---------- */
+  --color-canvas: var(--surface-canvas);
+  --color-panel: var(--surface-panel);
+  --color-reading: var(--surface-reading);
+  --color-overlay: var(--surface-overlay);
+  /* 交互态：hover/selected 用叠加色而不是切换整套表面色 */
+  --color-hover: var(--surface-hover);
+  --color-selected: var(--surface-selected);
 
-  --font-sans:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
-  --font-mono:
-    'Cascadia Code', 'JetBrains Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
-
-  /* 语义化表面色，避免各处硬编码 gray-x */
-  --color-surface: var(--surface);
-  --color-surface-raised: var(--surface-raised);
-  --color-surface-sunken: var(--surface-sunken);
-  --color-line: var(--line);
+  /* ---------- 文字与边框 ---------- */
   --color-ink: var(--ink);
   --color-ink-muted: var(--ink-muted);
   --color-ink-faint: var(--ink-faint);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  /* ---------- 语义色（按含义命名，不按色值命名）---------- */
+  --color-accent: var(--semantic-accent);
+  --color-success: var(--semantic-success);
+  --color-warning: var(--semantic-warning);
+  --color-danger: var(--semantic-danger);
+  --color-info: var(--semantic-info);
+  /* 来源标识：只用于「来自哪个工具」，不承担成功/失败含义 */
+  --color-codex: var(--source-codex);
+  --color-kimi: var(--source-kimi);
+  /* 强调色上的前景色（深色主题强调色偏亮 → 用深字；浅色主题反之） */
+  --color-accent-ink: var(--accent-ink);
+
+  /* ---------- 字体 ---------- */
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'Cascadia Code', 'JetBrains Mono', 'SFMono-Regular', Consolas, 'Liberation Mono',
+    monospace;
+
+  /* ---------- 类型层级（规格 §4.2：只保留这几级）---------- */
+  --text-title: 1rem; /* 16px 页面标题 */
+  --text-title--line-height: 1.4;
+  --text-title--font-weight: 600;
+  --text-lead: 0.875rem; /* 14px 面板标题、强调正文 */
+  --text-lead--line-height: 1.5;
+  --text-lead--font-weight: 600;
+  --text-body: 0.84375rem; /* 13.5px 正文与控件 */
+  --text-body--line-height: 1.6;
+  --text-meta: 0.75rem; /* 12px 元数据（路径、时间、设备、状态） */
+  --text-meta--line-height: 1.5;
+  --text-micro: 0.6875rem; /* 11px 仅技术标识（序号、hash、快捷键） */
+  --text-micro--line-height: 1.45;
+
+  /* ---------- 圆角（规格 §4.4）---------- */
+  --radius-control: 6px;
+  --radius-panel: 9px;
+  --radius-overlay: 12px;
 }
 
-/* 浅色 / 深色主题变量 */
+/* ---------------- 深色主题（石墨灰） ---------------- */
 :root {
-  --surface: oklch(0.99 0 0);
-  --surface-raised: oklch(1 0 0);
-  --surface-sunken: oklch(0.97 0 0);
-  --line: oklch(0.9 0 0);
-  --ink: oklch(0.22 0 0);
-  --ink-muted: oklch(0.45 0 0);
-  --ink-faint: oklch(0.62 0 0);
-  color-scheme: light;
+  --surface-canvas: oklch(0.171 0.004 265);
+  --surface-panel: oklch(0.203 0.005 265);
+  --surface-reading: oklch(0.238 0.005 265);
+  --surface-overlay: oklch(0.262 0.006 265);
+  --surface-hover: oklch(0.27 0.006 265 / 0.55);
+  --surface-selected: oklch(0.62 0.13 252 / 0.16);
+
+  --ink: oklch(0.945 0.002 265);
+  --ink-muted: oklch(0.775 0.006 265); /* 元数据主色：对比度 ≈ 7:1 */
+  --ink-faint: oklch(0.635 0.008 265); /* 三级信息：仅用于非关键装饰 */
+
+  --line: oklch(0.3 0.006 265);
+  --line-strong: oklch(0.4 0.008 265);
+
+  --semantic-accent: oklch(0.705 0.135 252);
+  --semantic-success: oklch(0.76 0.14 152);
+  --semantic-warning: oklch(0.86 0.115 82);
+  --semantic-danger: oklch(0.705 0.175 25);
+  --semantic-info: oklch(0.78 0.09 220);
+  --source-codex: oklch(0.75 0.05 250);
+  --source-kimi: oklch(0.78 0.1 190);
+  --accent-ink: oklch(0.19 0.02 265);
+
+  color-scheme: dark;
 }
 
-.dark {
-  --surface: oklch(0.17 0 0);
-  --surface-raised: oklch(0.21 0 0);
-  --surface-sunken: oklch(0.14 0 0);
-  --line: oklch(0.28 0 0);
-  --ink: oklch(0.93 0 0);
-  --ink-muted: oklch(0.72 0 0);
-  --ink-faint: oklch(0.56 0 0);
-  color-scheme: dark;
+/* ---------------- 浅色主题（略暖中性，禁止直接反色） ---------------- */
+:root:not(.dark),
+.light {
+  --surface-canvas: oklch(0.972 0.004 85);
+  --surface-panel: oklch(0.951 0.005 85);
+  --surface-reading: oklch(0.995 0 0);
+  --surface-overlay: oklch(1 0 0);
+  --surface-hover: oklch(0.4 0.01 85 / 0.07);
+  --surface-selected: oklch(0.55 0.14 252 / 0.12);
+
+  --ink: oklch(0.245 0.006 265);
+  --ink-muted: oklch(0.46 0.01 265); /* 元数据主色：对比度 ≈ 8:1 */
+  --ink-faint: oklch(0.53 0.012 265); /* 三级信息：仍保持 ≈ 4.5:1，避免“看不清” */
+
+  --line: oklch(0.885 0.005 85);
+  --line-strong: oklch(0.8 0.008 85);
+
+  --semantic-accent: oklch(0.52 0.16 252);
+  --semantic-success: oklch(0.455 0.12 152);
+  --semantic-warning: oklch(0.435 0.115 62);
+  --semantic-danger: oklch(0.53 0.19 25);
+  --semantic-info: oklch(0.5 0.1 220);
+  --source-codex: oklch(0.44 0.05 250);
+  --source-kimi: oklch(0.45 0.09 190);
+  --accent-ink: oklch(0.995 0 0);
+
+  color-scheme: light;
 }
 
 html,
@@ -61,41 +135,86 @@ body,
 }
 
 body {
-  background: var(--surface);
+  background: var(--surface-canvas);
   color: var(--ink);
   font-family: var(--font-sans);
-  font-size: 13px;
-  /* 桌面工具不需要整页缩放/回弹 */
+  /* 正文基准 13.5px：不再把关键信息压在 10.5–12px */
+  font-size: 0.84375rem;
+  line-height: 1.6;
   overscroll-behavior: none;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* 细滚动条：贴近 VS Code / Linear 的观感 */
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-::-webkit-scrollbar-thumb {
-  background: color-mix(in oklch, var(--ink-faint) 45%, transparent);
-  border-radius: 999px;
-  border: 2px solid transparent;
-  background-clip: content-box;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in oklch, var(--ink-faint) 70%, transparent);
-  background-clip: content-box;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
+/* ---------------- 基础层：焦点、选区、滚动条、动效 ---------------- */
+@layer base {
+  /* 统一焦点环：可见、可预期，且不依赖颜色单独表达（还带 2px 偏移的形状变化） */
+  :focus-visible {
+    outline: 2px solid var(--semantic-accent);
+    outline-offset: 2px;
+    border-radius: var(--radius-control);
+  }
+  /* 鼠标点击不显示焦点环（键盘用户仍然可见） */
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  ::selection {
+    background: color-mix(in oklch, var(--semantic-accent) 30%, transparent);
+    color: inherit;
+  }
+
+  /* 细滚动条：贴近桌面工具观感，并在两套主题下都可辨识 */
+  ::-webkit-scrollbar {
+    width: 11px;
+    height: 11px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: color-mix(in oklch, var(--ink-faint) 45%, transparent);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in oklch, var(--ink-faint) 75%, transparent);
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* 尊重系统的「减少动态效果」设置 */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
-/* 选中文本配色 */
-::selection {
-  background: color-mix(in oklch, var(--color-accent-500) 35%, transparent);
+/* ---------------- 少量语义化工具类 ---------------- */
+
+/* 技术标识（路径、hash、序号）：少数字号允许到 11px 的地方 */
+@utility text-tech {
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  line-height: var(--text-micro--line-height);
+  font-variant-numeric: tabular-nums;
 }
 
-/* 搜索结果里的高亮标记（后端 snippet 使用 <mark>） */
+/* 浮层阴影：只有 overlay 层允许使用阴影（规格 §4.4） */
+@utility shadow-overlay {
+  box-shadow:
+    0 1px 2px oklch(0 0 0 / 0.18),
+    0 12px 32px oklch(0 0 0 / 0.28);
+}
+
+/* 搜索结果高亮（后端 snippet 使用 <mark>） */
 mark {
-  background: color-mix(in oklch, var(--color-accent-400) 35%, transparent);
+  background: color-mix(in oklch, var(--semantic-warning) 35%, transparent);
   color: inherit;
   border-radius: 2px;
   padding: 0 1px;
