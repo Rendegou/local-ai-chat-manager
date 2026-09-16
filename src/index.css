@@ -397,10 +397,11 @@ mark {
  * 推理 = 引文细线；工具 = 内陷终端块；事件 = 弱化行。
  */
 
-/* 用户消息：accent 染色实体卡，与阅读面明显分离 */
+/* 用户消息：accent 染色实体卡，与阅读面明显分离。
+ * 底色用透明叠染（不混入纸面暖色相，否则浅色主题下发绿） */
 .msg-user {
   border-radius: var(--radius-msg);
-  background: color-mix(in oklch, var(--semantic-accent) 11%, var(--surface-reading));
+  background: color-mix(in oklch, var(--semantic-accent) 9%, transparent);
   border: 1px solid color-mix(in oklch, var(--semantic-accent) 24%, transparent);
   box-shadow: var(--shadow-msg);
 }
