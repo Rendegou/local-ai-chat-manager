@@ -1,0 +1,46 @@
+name: Release
+
+# 打 tag（v*）即触发：Windows 出 msi+nsis，macOS 出 dmg（arm64 + Intel），并自动挂到 GitHub Release。
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            targets: nsis,msi
+          - os: macos-latest
+            targets: dmg
+          - os: macos-13
+            targets: dmg
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          releaseName: 'Local AI Chat Manager v__VERSION__'
+          releaseDraft: false
+          prerelease: false
+          args: --bundles ${{ matrix.targets }}
