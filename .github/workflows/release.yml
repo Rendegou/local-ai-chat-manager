@@ -1,6 +1,7 @@
 name: Release
 
-# 打 tag（v*）即触发：Windows 出 msi+nsis，macOS 出 dmg（arm64 + Intel），并自动挂到 GitHub Release。
+# 打 tag（v*）即触发：Windows 出 msi+nsis，macOS 出 dmg（Apple Silicon），并自动挂到 GitHub Release。
+# 注：macos-13（Intel）runner 已被 GitHub 下线（任务会永远排队），Intel 包需要时再加回可用标签。
 on:
   push:
     tags:
@@ -18,8 +19,6 @@ jobs:
           - os: windows-latest
             targets: nsis,msi
           - os: macos-latest
-            targets: dmg
-          - os: macos-13
             targets: dmg
     runs-on: ${{ matrix.os }}
     steps:
@@ -40,6 +39,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          # 显式传 tag：否则 action 在某些事件形态下检测不到 tag，会静默跳过上传
+          tagName: ${{ github.ref_name }}
           releaseName: 'Local AI Chat Manager v__VERSION__'
           releaseDraft: false
           prerelease: false
