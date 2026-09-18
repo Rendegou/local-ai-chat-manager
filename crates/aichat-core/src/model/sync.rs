@@ -3,7 +3,11 @@
 use serde::{Deserialize, Serialize};
 
 /// 同步文件 schema 版本：所有写入仓库的文件都必须带版本号（规格 §29）。
-pub const SYNC_SCHEMA_VERSION: u32 = 1;
+///
+/// - 1：conversation.jsonl 全部内联文本；
+/// - 2：≥ `snapshot::BLOB_THRESHOLD` 的文本外置为 `.aichat/blobs/` 内容寻址 blob，
+///   jsonl 行以 `textRef` / `textBytes` 引用（读取端对 1 与 2 均兼容）。
+pub const SYNC_SCHEMA_VERSION: u32 = 2;
 
 /// 本地 SQLite 索引 schema 版本，由 `storage::migrations` 使用。
 pub const INDEX_SCHEMA_VERSION: u32 = 1;

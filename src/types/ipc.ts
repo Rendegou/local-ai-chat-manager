@@ -151,6 +151,8 @@ export interface StorageStats {
 export interface AppSettings {
   codexPath: string | null
   kimiPath: string | null
+  cursorPath: string | null
+  zcodePath: string | null
   syncRepo: string | null
   gitExe: string
   remoteUrl: string | null
@@ -209,6 +211,7 @@ export interface SyncStatus {
   isRepo: boolean
   branch: string
   remote: string | null
+  settingsRemote: string | null
   lastPull: string | null
   lastPush: string | null
   localChanges: number
@@ -216,6 +219,7 @@ export interface SyncStatus {
   ahead: number
   behind: number
   pendingSessions: number
+  pendingBytes: number
   conflict: GitConflict | null
   gitVersion: string | null
   changes: GitFileChange[]
@@ -239,7 +243,13 @@ export interface SyncReport {
   committed: boolean
   pushed: boolean
   pulled: boolean
-  snapshot: { written: number; skipped: number; failed: number; bytes: number; files: string[] }
+  snapshot: {
+    written: number
+    skipped: number
+    failed: number
+    bytes: number
+    files: { relPath: string; bytes: number }[]
+  }
   conflict: GitConflict | null
   durationMs: number
 }

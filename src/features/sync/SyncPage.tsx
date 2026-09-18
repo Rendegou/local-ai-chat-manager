@@ -73,12 +73,17 @@ export function SyncPage() {
   const conflict = status?.conflict ?? report?.conflict ?? null
   const pending = status?.pendingSessions ?? 0
   const changes = status?.localChanges ?? 0
+  // 设置里已保存远端地址时，同步会自动应用，视为已配置
+  const remoteConfigured = Boolean(status?.remote || status?.settingsRemote)
+  const failedSteps = report?.steps.filter((step) => !step.ok) ?? []
+  const pushAuthFailed = failedSteps.some((step) => step.detail.includes('publickey'))
 
   /** 根据状态给出「推荐的下一步」（规格 §6.3 第 2 点）。 */
   const nextStep = (() => {
     if (conflict) {
       return {
         tone: 'danger' as const,
+        action: null,
         title: '先处理同步冲突',
         body: '存在未合并文件。仓库不会被自动合并，也不会丢弃任何一边。',
       }
@@ -86,26 +91,54 @@ export function SyncPage() {
     if (!repoConfigured) {
       return {
         tone: 'info' as const,
+        action: 'settings' as const,
         title: '先绑定同步仓库',
         body: '选择一个目录作为同步仓库（会自动 git init），之后才能在多台电脑之间同步。',
       }
     }
-    if (!status?.remote) {
+    if (!remoteConfigured) {
       return {
         tone: 'warning' as const,
+        action: 'saveRemote' as const,
         title: '还没有配置远端',
         body: '只配置仓库不配置远端时，同步只能在本机提交，无法跨设备。',
+      }
+    }
+    if (failedSteps.length > 0) {
+      return {
+        tone: 'danger' as const,
+        action: 'sync' as const,
+        title: '上一次同步未完全成功',
+        body: '本地提交已完成，但有步骤失败（见上方详情）。修复后点击「立即同步」重试。',
       }
     }
     if (pending > 0 || changes > 0) {
       return {
         tone: 'accent' as const,
+        action: 'sync' as const,
         title: `有 ${pending} 个会话待同步`,
         body: '点击「立即同步」写入快照、提交并推送；冲突时不会自动合并。',
       }
     }
+    if (status?.remote && !status?.lastPush) {
+      return {
+        tone: 'warning' as const,
+        action: 'sync' as const,
+        title: '还没有成功推送到远端',
+        body: '远端已配置但首次推送尚未成功。点击「立即同步」重试；认证失败时优先换用 https:// 地址。',
+      }
+    }
+    if ((status?.ahead ?? 0) > 0) {
+      return {
+        tone: 'warning' as const,
+        action: 'sync' as const,
+        title: `本地有 ${status?.ahead ?? 0} 个提交未推送`,
+        body: '提交已在本地仓库，但远端还没有。点击「立即同步」推送。',
+      }
+    }
     return {
       tone: 'success' as const,
+      action: null,
       title: '已是最新状态',
       body: '本机会话都已写入仓库，远端也没有新的提交。',
     }
@@ -213,6 +246,33 @@ export function SyncPage() {
             </Notice>
           ) : null}
 
+          {/* 步骤级失败（推送认证失败、拉取失败等）：不抛错也要有持续到用户看到的反馈 */}
+          {!conflict && failedSteps.length > 0 ? (
+            <Notice
+              tone="danger"
+              title="上一次同步未完全成功"
+              actions={
+                <Button size="sm" onClick={() => void run({ push: true })} disabled={running}>
+                  重试同步
+                </Button>
+              }
+            >
+              <ul>
+                {failedSteps.map((step) => (
+                  <li key={step.name}>
+                    · {step.name}：{step.detail || '未知原因'}
+                  </li>
+                ))}
+              </ul>
+              {pushAuthFailed ? (
+                <div className="pt-1 text-meta text-ink-muted">
+                  SSH 地址需要本机已配置 key。建议把远端改成 https:// 地址（凭据交给系统 Git
+                  Credential Manager，首次推送会弹窗登录），或先在终端配置 SSH key。
+                </div>
+              ) : null}
+            </Notice>
+          ) : null}
+
           {!repoConfigured ? (
             <EmptyState
               title="还没有绑定同步仓库"
@@ -270,15 +330,15 @@ export function SyncPage() {
                 tone={nextStep.tone === 'accent' ? 'info' : nextStep.tone}
                 title={nextStep.title}
                 actions={
-                  nextStep.tone === 'accent' ? (
+                  nextStep.action === 'sync' ? (
                     <Button size="sm" onClick={() => void run({ push: true })} disabled={running}>
                       立即同步
                     </Button>
-                  ) : nextStep.tone === 'warning' ? (
+                  ) : nextStep.action === 'saveRemote' ? (
                     <Button size="sm" onClick={() => void run({ push: false, setRemote: remoteInput })} disabled={!remoteInput.trim()}>
                       保存远端并同步
                     </Button>
-                  ) : nextStep.tone === 'info' ? (
+                  ) : nextStep.action === 'settings' ? (
                     <Button size="sm" onClick={() => setPage('settings')}>
                       去设置
                     </Button>
@@ -290,9 +350,12 @@ export function SyncPage() {
 
               {/* 3. 待同步摘要 + 隐私提醒 */}
               <SectionCard title="待同步内容" description="点击「立即同步」后会发生的事">
-                <div className="grid gap-x-6 sm:grid-cols-3">
+                <div className="grid gap-x-6 sm:grid-cols-4">
                   <Field label="待同步会话">
                     <span className="tabular-nums">{pending} 个</span>
+                  </Field>
+                  <Field label="预计写入">
+                    <span className="tabular-nums">约 {formatBytes(status?.pendingBytes ?? 0)}</span>
                   </Field>
                   <Field label="本地未提交">
                     <span className="tabular-nums">{changes} 个文件</span>
@@ -301,14 +364,16 @@ export function SyncPage() {
                     <span className="tabular-nums">{status?.ahead ?? 0} 个提交</span>
                   </Field>
                 </div>
-                <div className="pt-2">
-                  <FormlessRemoteInput
-                    value={remoteInput}
-                    onChange={setRemoteInput}
-                    onSubmit={() => void run({ push: false, setRemote: remoteInput })}
-                    disabled={running || !remoteInput.trim()}
-                  />
-                </div>
+                {!remoteConfigured ? (
+                  <div className="pt-2">
+                    <FormlessRemoteInput
+                      value={remoteInput}
+                      onChange={setRemoteInput}
+                      onSubmit={() => void run({ push: false, setRemote: remoteInput })}
+                      disabled={running || !remoteInput.trim()}
+                    />
+                  </div>
+                ) : null}
                 <div className="pt-2">
                   <Notice tone="warning" title="提醒：同步内容会离开本机">
                     AI 会话可能包含源代码、命令输出、内网地址与密钥，请使用 Private Repository；
@@ -337,6 +402,34 @@ export function SyncPage() {
                       }
                     />
                   ))}
+                  {report.snapshot.written > 0 ? (
+                    <div className="pt-2">
+                      <div className="text-meta text-ink-muted">
+                        本次写入 {report.snapshot.written} 个会话目录，共{' '}
+                        {formatBytes(report.snapshot.bytes)}
+                      </div>
+                      <ul className="max-h-40 overflow-y-auto pt-1">
+                        {report.snapshot.files.slice(0, 20).map((file) => (
+                          <li
+                            key={file.relPath}
+                            className="flex items-baseline justify-between gap-3"
+                          >
+                            <span className="truncate text-tech text-ink-muted">
+                              {file.relPath}
+                            </span>
+                            <span className="shrink-0 text-meta tabular-nums text-ink-muted">
+                              {formatBytes(file.bytes)}
+                            </span>
+                          </li>
+                        ))}
+                        {report.snapshot.files.length > 20 ? (
+                          <li className="text-meta text-ink-muted">
+                            … 共 {report.snapshot.files.length} 个会话目录
+                          </li>
+                        ) : null}
+                      </ul>
+                    </div>
+                  ) : null}
                 </SectionCard>
               ) : null}
 
@@ -490,7 +583,7 @@ function FormlessRemoteInput({
         onChange={(event) => onChange(event.target.value)}
         onEnter={onSubmit}
         aria-label="远端仓库地址"
-        placeholder="git@github.com:you/aichat-history.git（填写后可直接保存并同步）"
+        placeholder="https://github.com/you/aichat-history.git（也支持 git@，保存后直接同步）"
         className="font-mono text-meta"
       />
       <Button onClick={onSubmit} disabled={disabled}>

@@ -252,6 +252,7 @@ impl ConversationAdapter for KimiAdapter {
                     // 本机会话：归属本机（写入索引后用于区分「本机 / 其他设备」）
                     machine_id: Some(ctx.machine_id.to_string()),
                     files,
+                    content_revision: None,
                 });
             }
         }

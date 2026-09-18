@@ -105,6 +105,16 @@ impl Library {
     /// 更新设置（校验 → 落盘 → 生效）。
     pub fn update_settings(&self, new_settings: AppSettings) -> Result<AppSettings> {
         new_settings.validate()?;
+        let snapshot_policy_changed = self
+            .settings
+            .read()
+            .map(|current| current.keep_raw_files != new_settings.keep_raw_files)
+            .unwrap_or(false);
+        if snapshot_policy_changed {
+            // 标记操作即使随后保存设置失败也只是导致下次多做一次无害的快照校验。
+            self.db
+                .mark_synced_sessions_modified(&self.machine.machine_id)?;
+        }
         new_settings.save(&self.data_dir)?;
         let mut guard = self
             .settings

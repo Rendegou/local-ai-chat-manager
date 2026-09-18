@@ -62,7 +62,7 @@ export function SettingsPage() {
   const patch = patchSettingsDraft
 
   /** 选择目录。 */
-  const pickDirectory = async (key: 'codexPath' | 'kimiPath' | 'syncRepo') => {
+  const pickDirectory = async (key: 'codexPath' | 'kimiPath' | 'cursorPath' | 'zcodePath' | 'syncRepo') => {
     const selected = await openDialog({ directory: true, multiple: false, title: '选择目录' })
     if (typeof selected === 'string') patch({ [key]: selected })
   }
@@ -120,7 +120,7 @@ export function SettingsPage() {
           {/* 1. 数据源 */}
           <SectionCard
             title="数据源"
-            description="留空 = 自动发现（Kimi：KIMI_CODE_HOME → ~/.kimi-code；Codex：CODEX_HOME → ~/.codex）"
+            description="留空 = 自动发现（Kimi：~/.kimi-code；Codex：~/.codex；Cursor：%APPDATA%\Cursor；ZCode：~/.zcode）"
           >
             <FormField label="Codex 目录" hint="手工指定后只扫描该目录，不再自动发现其他位置">
               {(props) => (
@@ -144,6 +144,28 @@ export function SettingsPage() {
                 />
               )}
             </FormField>
+            <FormField label="Cursor 目录" hint="通常是 %APPDATA%\Cursor\User\globalStorage（会话存于 state.vscdb）">
+              {(props) => (
+                <DirectoryInput
+                  {...props}
+                  value={draft.cursorPath ?? ''}
+                  onChange={(value) => patch({ cursorPath: value || null })}
+                  placeholder="C:\Users\you\AppData\Roaming\Cursor\User\globalStorage"
+                  onBrowse={() => void pickDirectory('cursorPath')}
+                />
+              )}
+            </FormField>
+            <FormField label="ZCode 目录" hint="通常是 ~/.zcode/v2/sessions">
+              {(props) => (
+                <DirectoryInput
+                  {...props}
+                  value={draft.zcodePath ?? ''}
+                  onChange={(value) => patch({ zcodePath: value || null })}
+                  placeholder="C:\Users\you\.zcode\v2\sessions"
+                  onBrowse={() => void pickDirectory('zcodePath')}
+                />
+              )}
+            </FormField>
           </SectionCard>
 
           {/* 2. 同步与隐私 */}
@@ -162,13 +184,13 @@ export function SettingsPage() {
                 />
               )}
             </FormField>
-            <FormField label="远端地址" hint="支持 GitHub / GitLab / Gitea / 自建 Git">
+            <FormField label="远端地址" hint="支持 https://（推荐，凭据交给系统 Git Credential Manager）或 git@（需已配置 SSH key）">
               {(props) => (
                 <TextInput
                   {...props}
                   value={draft.remoteUrl ?? ''}
                   onChange={(event) => patch({ remoteUrl: event.target.value || null })}
-                  placeholder="git@github.com:you/aichat-history.git"
+                  placeholder="https://github.com/you/aichat-history.git"
                 />
               )}
             </FormField>
@@ -235,8 +257,8 @@ export function SettingsPage() {
           {/* 4. 外观与行为 */}
           <SectionCard title="外观与行为" description="监听与自动扫描都只影响索引，不改动原始文件">
             <Toggle
-              label="保留原始会话文件"
-              description="写快照时同时复制原始 state.json / wire.jsonl（关闭后只同步归一化文本）"
+              label="额外保留原始会话副本"
+              description="默认关闭以节省 Git 空间；开启会同时上传 raw 文件。关闭并保存后，下次同步会清理本机快照中的 raw，不影响 Codex / Kimi 原文件"
               checked={draft.keepRawFiles}
               onChange={(value) => patch({ keepRawFiles: value })}
             />

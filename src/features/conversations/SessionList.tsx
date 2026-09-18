@@ -10,7 +10,7 @@
 import { useMemo } from 'react'
 
 import { useVirtual } from '../../hooks/useVirtual'
-import { dateGroupLabel, formatRelative, sourceLabel, syncStatusLabel } from '../../lib/format'
+import { dateGroupLabel, formatRelative, sourceLabel, sourceTone, syncStatusLabel } from '../../lib/format'
 import { useLibrary } from '../../stores/library'
 import type { SessionSummary } from '../../types/ipc'
 import { Dot, EmptyState, StatusPill } from '../../components/ui'
@@ -86,7 +86,7 @@ export function SessionList() {
       {rows.length === 0 ? (
         <EmptyState
           title="没有会话"
-          description="点击顶部「扫描」发现本机 Codex / Kimi Code 会话；若未探测到目录，可在设置中手工指定。"
+          description="点击顶部「扫描」发现本机 AI 编程工具的会话；若未探测到目录，可在设置中手工指定。"
         />
       ) : (
         <div className="relative min-h-0 flex-1">
@@ -191,7 +191,7 @@ function SessionRow({
         ) : null}
       </div>
       <div className="flex min-w-0 items-center gap-1.5 text-meta text-ink-muted">
-        <Dot tone={session.source === 'kimi' ? 'kimi' : 'codex'} />
+        <Dot tone={sourceTone(session.source)} />
         <span className="shrink-0">{sourceLabel(session.source)}</span>
         <span className="min-w-0 flex-1 truncate">{session.projectPath ?? '未知项目'}</span>
         <span className="ml-auto shrink-0 tabular-nums">

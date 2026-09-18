@@ -24,6 +24,8 @@ fn settings_for(source: SourceKind, dir: &str) -> AppSettings {
     match source {
         SourceKind::Kimi => settings.kimi_path = Some(root),
         SourceKind::Codex => settings.codex_path = Some(root),
+        SourceKind::Cursor => settings.cursor_path = Some(root),
+        SourceKind::Zcode => settings.zcode_path = Some(root),
     }
     settings
 }

@@ -6,8 +6,10 @@
 //! - 超大会话走流式解析：边解析边通过 [`MessageSink`] 写入数据库，不整体驻留内存。
 
 pub mod codex;
+pub mod cursor;
 pub mod kimi;
 pub mod repo;
+pub mod zcode;
 
 use std::collections::HashSet;
 
@@ -19,8 +21,10 @@ use crate::model::{
 use crate::settings::AppSettings;
 
 pub use codex::CodexAdapter;
+pub use cursor::CursorAdapter;
 pub use kimi::KimiAdapter;
 pub use repo::SyncRepoAdapter;
+pub use zcode::ZcodeAdapter;
 
 /// 单条消息文本上限（索引与 IPC 用）。
 ///
@@ -145,8 +149,12 @@ pub trait ConversationAdapter: Send + Sync {
 ///
 /// `repo_root` 为 Some 时追加同步仓库适配器，用于索引其他机器拉取下来的会话。
 pub fn default_adapters(repo_root: Option<String>) -> Vec<Box<dyn ConversationAdapter>> {
-    let mut list: Vec<Box<dyn ConversationAdapter>> =
-        vec![Box::new(CodexAdapter::new()), Box::new(KimiAdapter::new())];
+    let mut list: Vec<Box<dyn ConversationAdapter>> = vec![
+        Box::new(CodexAdapter::new()),
+        Box::new(KimiAdapter::new()),
+        Box::new(CursorAdapter::new()),
+        Box::new(ZcodeAdapter::new()),
+    ];
     if let Some(root) = repo_root {
         if !root.trim().is_empty() {
             list.push(Box::new(SyncRepoAdapter::new(root)));

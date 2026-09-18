@@ -10,6 +10,7 @@
 //! ```
 //!
 //! 隐私：`raw/` 复制时已过滤凭证类文件；此处只读取 `meta.json` 与 `conversation.jsonl`。
+//! 读取兼容 schema v1 与 v2：v2 行的 `textRef` 会从 `.aichat/blobs/` 还原文本。
 
 use std::path::{Path, PathBuf};
 
@@ -129,6 +130,7 @@ impl ConversationAdapter for SyncRepoAdapter {
                         project_path: None,
                         machine_id: Some(machine_id.clone()),
                         files,
+                        content_revision: None,
                     });
                 }
             }
@@ -207,10 +209,14 @@ impl ConversationAdapter for SyncRepoAdapter {
                         .and_then(|v| v.as_str())
                         .unwrap_or("event"),
                 );
-                let text = value
-                    .get("text")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string());
+                // textRef（schema v2）先于 DupFilter 还原，重复判定基于还原后的文本
+                let text = match value.get("text").and_then(|v| v.as_str()) {
+                    Some(t) => Some(t.to_string()),
+                    None => value
+                        .get("textRef")
+                        .and_then(|v| v.as_str())
+                        .map(|reference| resolve_blob_text(&self.root, reference, &mut info)),
+                };
                 if let Some(t) = text.as_deref() {
                     if kind == MessageKind::Message && dup.is_duplicate(role, t) {
                         return Ok(crate::parser::jsonl::Flow::Continue);
@@ -256,6 +262,23 @@ impl ConversationAdapter for SyncRepoAdapter {
     fn is_remote(&self) -> bool {
         true
     }
+}
+
+/// 解析 `textRef`（形如 `blake3:<hex>`）：从 `.aichat/blobs/` 读回文本。
+/// 读取失败或文件缺失时记警告并返回占位文本，保证其余消息不受影响。
+fn resolve_blob_text(root: &Path, reference: &str, info: &mut ParsedSessionInfo) -> String {
+    let hash = reference.strip_prefix("blake3:").unwrap_or(reference);
+    let short = &hash[..hash.len().min(12)];
+    if reference.strip_prefix("blake3:").is_some() {
+        let path = crate::sync::snapshot::blob_path(root, hash);
+        match std::fs::read_to_string(&path) {
+            Ok(text) => return text,
+            Err(err) => info.warn(format!("blob 读取失败（{short}）：{err}")),
+        }
+    } else {
+        info.warn(format!("未知 textRef 格式：{reference}"));
+    }
+    format!("[快照内容缺失:blob {short}]")
 }
 
 /// 列出快照 `raw/` 下的原始文件引用。

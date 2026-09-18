@@ -29,7 +29,7 @@ use crate::settings::AppSettings;
 use crate::storage::db::Database;
 
 pub use git::{GitCommand, GitFileChange, GitOutput, GitRepo, GitStatus, RepoState};
-pub use snapshot::{SnapshotOutcome, SnapshotReport};
+pub use snapshot::{SnapshotEntry, SnapshotOutcome, SnapshotReport};
 
 /// 同步步骤记录（UI 上按顺序展示）。
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -93,6 +93,8 @@ pub struct SyncStatusDto {
     pub is_repo: bool,
     pub branch: String,
     pub remote: Option<String>,
+    /// 设置里保存的远端地址（仓库 git config 未配置时，同步会自动应用它）
+    pub settings_remote: Option<String>,
     pub last_pull: Option<String>,
     pub last_push: Option<String>,
     /// 本地未提交变更文件数
@@ -103,6 +105,8 @@ pub struct SyncStatusDto {
     pub behind: i32,
     /// 待同步的会话数（本机新增 / 修改）
     pub pending_sessions: usize,
+    /// 待同步会话源文件的总字节数（写入仓库量的估算）
+    pub pending_bytes: u64,
     pub conflict: Option<GitConflict>,
     pub git_version: Option<String>,
     pub changes: Vec<GitFileChange>,
@@ -226,11 +230,15 @@ pub fn sync_now(
     report.snapshot = write_snapshots(ctx, &root)?;
     let snapshot = &report.snapshot;
     let (written, skipped, failed) = (snapshot.written, snapshot.skipped, snapshot.failed);
+    let mut detail = format!("新增/更新 {written}，未变化 {skipped}，失败 {failed}");
+    if written > 0 {
+        detail.push_str(&format!("，写入 {}", human_bytes(snapshot.bytes)));
+    }
     push_step(
         &mut report,
         "写会话快照",
         failed == 0,
-        format!("新增/更新 {written}，未变化 {skipped}，失败 {failed}"),
+        detail,
         t2.elapsed().as_millis(),
     );
 
@@ -366,6 +374,13 @@ pub fn status(ctx: &SyncContext<'_>) -> Result<SyncStatusDto> {
         return Ok(dto);
     };
     dto.repo = Some(display_path(&root));
+    dto.settings_remote = ctx
+        .settings
+        .remote_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
     dto.exists = root.is_dir();
     if !dto.exists {
         dto.error = Some("同步仓库目录不存在".to_string());
@@ -374,6 +389,7 @@ pub fn status(ctx: &SyncContext<'_>) -> Result<SyncStatusDto> {
     let repo = ctx.repo(&root);
     dto.is_repo = repo.is_repo();
     dto.pending_sessions = ctx.db.sessions_pending_sync(ctx.machine_id)?.len();
+    dto.pending_bytes = ctx.db.pending_sync_bytes(ctx.machine_id)?;
     dto.last_pull = ctx.db.get_setting(KEY_LAST_PULL)?;
     dto.last_push = ctx.db.get_setting(KEY_LAST_PUSH)?;
     dto.git_version = repo.git().version().ok();
@@ -441,9 +457,13 @@ fn write_snapshots(ctx: &SyncContext<'_>, root: &Path) -> Result<SnapshotReport>
             ctx.settings.keep_raw_files,
         ) {
             Ok(SnapshotOutcome::Written(rel)) => {
+                let bytes = snapshot_size(root, &rel);
                 report.written += 1;
-                report.bytes += snapshot_size(root, &rel);
-                report.files.push(rel.clone());
+                report.bytes += bytes;
+                report.files.push(SnapshotEntry {
+                    rel_path: rel.clone(),
+                    bytes,
+                });
                 snapshot::mark_synced(ctx.db, &summary, &rel, ctx.machine_id)?;
             }
             Ok(SnapshotOutcome::Skipped) => {
@@ -520,6 +540,22 @@ fn first_line(text: &str) -> String {
         .unwrap_or("")
         .trim()
         .to_string()
+}
+
+/// 人类可读的字节数（同步步骤详情用）。
+fn human_bytes(bytes: u64) -> String {
+    const KB: u64 = 1024;
+    const MB: u64 = KB * 1024;
+    const GB: u64 = MB * 1024;
+    if bytes >= GB {
+        format!("{:.1} GB", bytes as f64 / GB as f64)
+    } else if bytes >= MB {
+        format!("{:.1} MB", bytes as f64 / MB as f64)
+    } else if bytes >= KB {
+        format!("{:.1} KB", bytes as f64 / KB as f64)
+    } else {
+        format!("{bytes} B")
+    }
 }
 
 #[cfg(test)]

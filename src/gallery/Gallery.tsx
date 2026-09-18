@@ -492,7 +492,7 @@ export function Gallery() {
               {(props) => <TextInput {...props} placeholder="~/.codex" />}
             </FormField>
             <FormField label="远端地址" error="远端仓库不可达，请检查地址与凭证">
-              {(props) => <TextInput {...props} defaultValue="git@github.com:you/aichat-history.git" />}
+              {(props) => <TextInput {...props} defaultValue="https://github.com/you/aichat-history.git" />}
             </FormField>
           </SectionCard>
           <SectionCard title="危险区" tone="danger" description="重建索引会清空并重新解析全部会话">

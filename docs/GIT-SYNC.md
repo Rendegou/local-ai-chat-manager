@@ -19,14 +19,26 @@
 ├── .gitignore                       # 忽略 *.tmp
 ├── .aichat/
 │   ├── version.json                 # schemaVersion / app / 创建时间
-│   └── machines.json                # 每台机器的登记信息（首次/最近同步时间）
+│   ├── machines.json                # 每台机器的登记信息（首次/最近同步时间）
+│   └── blobs/<hash前2位>/<hash>.txt # 内容寻址的大文本（schema v2，全仓库只存一份）
 ├── codex/<machine-id>/<session-id>/
 │   ├── meta.json                    # schemaVersion / 标题 / 项目 / 时间 / contentHash / machineId
 │   ├── conversation.jsonl           # 归一化消息流（一行一条，Git 可 diff）
 │   └── raw/                         # 可选：原始文件副本（Keep Raw Session Files）
 ├── kimi/<machine-id>/<session-id>/{meta.json, conversation.jsonl, raw/}
+├── cursor/... 、zcode/...            # 同构（Cursor 会话来自 SQLite，无 raw/）
 └── archives/<source>/<machine-id>/<session-id>.tar.zst
 ```
+
+### 大文本去重（schema v2）
+
+会话里常见逐字节重复的大块内容：Codex 每个会话开头注入的 AGENTS.md、反复读取同一文件的工具输出等。
+写快照时，≥ 4KB 的消息文本会外置到 `.aichat/blobs/<hash>.txt`（BLAKE3 内容寻址），
+`conversation.jsonl` 中对应行只保留 `textRef` 引用——**相同内容全仓库（含跨机器）只存一份**。
+
+- blob 写入失败会降级为内联原文，绝不丢内容；当前不做 blob GC（孤儿极少）。
+- **兼容性**：旧版本（schema v1）的应用读 v2 快照时，外置消息的文本显示为空；
+  请保证各机器上的应用版本一致。相似但不相同的文本不做去重，交给 git packfile 的 delta 压缩。
 
 **每台机器只写自己的 `<source>/<machine-id>/`，其他机器目录视为只读** —— 这是第一版「让冲突不发生」的核心设计：
 即使两台机器产生同名 session id，也落在不同目录下，不会互相覆盖。
@@ -34,7 +46,9 @@
 ## 3. 初始化
 
 1. 打开「设置」→ 选择一个目录（例如 `D:\AIChatRepo`，不要选 `~/.codex` 之类）；
-2. 可选：填写远端地址（GitHub / GitLab / Gitea / 自建 Git 均可，客户端不绑定任何平台 API）；
+2. 可选：填写远端地址（GitHub / GitLab / Gitea / 自建 Git 均可，客户端不绑定任何平台 API）。
+   推荐 `https://` 地址（凭据交给系统 Git Credential Manager，首次推送会弹窗登录）；
+   `git@` SSH 地址要求本机已配置 SSH key，否则推送会报 `Permission denied (publickey)`；
 3. 点击「立即同步」：目录不是 Git 仓库时会自动 `git init`；
 4. 有远端时会先 `git pull --rebase`，无上游分支时用 `push --set-upstream origin <branch>`。
 
@@ -94,7 +108,15 @@ PC-B 本机的会话同样会被扫描并 push；因为目录按机器隔离，�
   并**移除仓库中的活动快照目录**（避免同一份数据存两份）；本地原始文件不受影响；
 - 归档会话仍可被索引引用（搜索 / 列表可显示），随时可在同步页「恢复」回活动快照。
 
-## 9. 常见问题
+## 9. 仓库体积控制
+
+- 默认只同步 `conversation.jsonl` 与 `meta.json`。归一化文本已经足够跨设备浏览、搜索和恢复索引；
+- 「额外保留原始会话副本」默认关闭。开启后，`raw/` 会与归一化文本同时存在，适合确实需要保存工具私有格式的场景，但会明显增加仓库体积；
+- 从开启改为关闭后，下一次同步会删除本机快照目录中的 `raw/`，但绝不会删除 Codex / Kimi 的本地原始文件；
+- Git 提交历史仍会保留已经推送过的旧 blob。仅删除当前分支里的 `raw/` 能控制后续增长，却不会立即缩小完整克隆体积；已有大仓库需要在备份后一次性重写历史，或新建干净仓库重新同步；
+- 不要把数据库、缓存、构建产物或整个 AI 工具数据目录放进同步仓库。同步仓库只应包含应用生成的会话快照。
+
+## 10. 常见问题
 
 | 现象 | 原因与处理 |
 | --- | --- |

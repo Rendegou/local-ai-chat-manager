@@ -95,7 +95,25 @@ export function baseName(path: string | null | undefined): string {
 export function sourceLabel(source: string): string {
   if (source === 'kimi') return 'Kimi Code'
   if (source === 'codex') return 'Codex'
+  if (source === 'cursor') return 'Cursor'
+  if (source === 'zcode') return 'ZCode'
   return source
+}
+
+/** 数据源色点/徽章语气（没有专属配色的数据源用 accent / neutral 兜底）。 */
+export function sourceTone(source: string): 'neutral' | 'accent' | 'codex' | 'kimi' {
+  if (source === 'kimi') return 'kimi'
+  if (source === 'codex') return 'codex'
+  if (source === 'cursor') return 'accent'
+  return 'neutral'
+}
+
+/** 数据源强调文字色（会话标题旁的来源标注）。 */
+export function sourceTextClass(source: string): string {
+  if (source === 'kimi') return 'text-kimi'
+  if (source === 'codex') return 'text-codex'
+  if (source === 'cursor') return 'text-accent'
+  return 'text-ink'
 }
 
 /** 消息角色展示名。 */

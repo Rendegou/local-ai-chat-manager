@@ -60,6 +60,10 @@ pub struct AppSettings {
     pub codex_path: Option<String>,
     /// Kimi Code 数据目录手工覆盖
     pub kimi_path: Option<String>,
+    /// Cursor 数据目录手工覆盖（指向 globalStorage，内含 state.vscdb）
+    pub cursor_path: Option<String>,
+    /// ZCode 会话目录手工覆盖（指向 `v2/sessions`）
+    pub zcode_path: Option<String>,
     /// 同步仓库根目录（独立于 AI 工具数据目录，规格 §4.3）
     pub sync_repo: Option<String>,
     /// git 可执行文件（默认 `git`，从 PATH 查找）
@@ -70,7 +74,7 @@ pub struct AppSettings {
     pub archive_compression: Compression,
     /// 归档阈值天数（默认 90 天未更新，规格 §17）
     pub archive_after_days: u32,
-    /// 是否在快照时复制原始会话文件（默认开启，规格 §15）
+    /// 是否在快照时复制原始会话文件（默认关闭，避免与归一化消息重复占用 Git 空间）
     pub keep_raw_files: bool,
     /// 启动后自动增量扫描
     pub auto_scan_on_start: bool,
@@ -89,12 +93,14 @@ impl Default for AppSettings {
         AppSettings {
             codex_path: None,
             kimi_path: None,
+            cursor_path: None,
+            zcode_path: None,
             sync_repo: None,
             git_exe: "git".to_string(),
             remote_url: None,
             archive_compression: Compression::Zstd,
             archive_after_days: 90,
-            keep_raw_files: true,
+            keep_raw_files: false,
             auto_scan_on_start: true,
             watch_enabled: true,
             theme: Theme::System,
@@ -160,6 +166,22 @@ impl AppSettings {
     /// Kimi 数据目录：手工配置优先。
     pub fn kimi_root(&self) -> Option<PathBuf> {
         self.kimi_path
+            .as_deref()
+            .map(paths::expand_home)
+            .filter(|p| !p.as_os_str().is_empty())
+    }
+
+    /// Cursor 数据目录：手工配置优先。
+    pub fn cursor_root(&self) -> Option<PathBuf> {
+        self.cursor_path
+            .as_deref()
+            .map(paths::expand_home)
+            .filter(|p| !p.as_os_str().is_empty())
+    }
+
+    /// ZCode 会话目录：手工配置优先。
+    pub fn zcode_root(&self) -> Option<PathBuf> {
+        self.zcode_path
             .as_deref()
             .map(paths::expand_home)
             .filter(|p| !p.as_os_str().is_empty())
@@ -287,7 +309,7 @@ mod tests {
         let s = AppSettings::load_or_default(dir.path());
         assert_eq!(s.git_exe, "git");
         assert_eq!(s.archive_after_days, 90);
-        assert!(s.keep_raw_files);
+        assert!(!s.keep_raw_files);
     }
 
     #[test]

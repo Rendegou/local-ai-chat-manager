@@ -77,8 +77,12 @@ impl Machine {
         let data_dir = root.join(format!("data-{name}"));
         let empty_kimi = root.join(format!("empty-kimi-{name}"));
         let empty_codex = root.join(format!("empty-codex-{name}"));
+        let empty_cursor = root.join(format!("empty-cursor-{name}"));
+        let empty_zcode = root.join(format!("empty-zcode-{name}"));
         std::fs::create_dir_all(&empty_kimi).unwrap();
         std::fs::create_dir_all(&empty_codex).unwrap();
+        std::fs::create_dir_all(&empty_cursor).unwrap();
+        std::fs::create_dir_all(&empty_zcode).unwrap();
 
         let settings = AppSettings {
             kimi_path: Some(match kimi_fixture {
@@ -86,6 +90,9 @@ impl Machine {
                 None => empty_kimi.display().to_string(),
             }),
             codex_path: Some(empty_codex.display().to_string()),
+            // 显式指向空目录：测试不应扫描开发机上的真实 Cursor / ZCode 数据
+            cursor_path: Some(empty_cursor.display().to_string()),
+            zcode_path: Some(empty_zcode.display().to_string()),
             sync_repo: repo.as_ref().map(|p| p.display().to_string()),
             ..Default::default()
         };

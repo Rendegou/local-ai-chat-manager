@@ -205,6 +205,7 @@ impl ConversationAdapter for CodexAdapter {
                 project_path: None, // 需要读 session_meta，交给解析阶段
                 machine_id: Some(ctx.machine_id.to_string()),
                 files: vec![raw_ref("rollout", &file)],
+                content_revision: None,
             });
         }
         Ok(out)

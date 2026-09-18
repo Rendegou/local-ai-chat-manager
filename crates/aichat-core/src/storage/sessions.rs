@@ -322,6 +322,21 @@ impl Database {
         })
     }
 
+    /// 快照存储策略变化后，把本机已同步会话重新标记为待同步。
+    ///
+    /// 例如关闭 `keep_raw_files` 后，下一次同步需要重新处理已有快照，
+    /// 才能删除仓库里的 `raw/` 副本；本地 AI 工具的原始文件不受影响。
+    pub fn mark_synced_sessions_modified(&self, machine_id: &str) -> Result<usize> {
+        self.with_conn(|conn| {
+            let changed = conn.execute(
+                "UPDATE sessions SET sync_status = 'modified'
+                 WHERE machine_id = ?1 AND archived = 0 AND sync_status = 'synced'",
+                params![machine_id],
+            )?;
+            Ok(changed)
+        })
+    }
+
     /// 标记归档状态（归档写盘后调用）。
     pub fn set_archived(&self, session_id: &str, archived: bool) -> Result<()> {
         self.with_conn(|conn| {
@@ -622,6 +637,20 @@ impl Database {
                 .query_map(params![machine_id], map_session)?
                 .collect::<std::result::Result<Vec<_>, _>>()?;
             Ok(rows)
+        })
+    }
+
+    /// 待同步会话的源文件总字节数（估算将写入仓库的体量）。
+    pub fn pending_sync_bytes(&self, machine_id: &str) -> Result<u64> {
+        self.with_conn(|conn| {
+            let bytes: i64 = conn.query_row(
+                "SELECT COALESCE(SUM(r.size), 0) FROM raw_files r
+                 JOIN sessions s ON s.id = r.session_id
+                 WHERE s.machine_id = ?1 AND s.archived = 0 AND s.sync_status IN ('local','modified')",
+                params![machine_id],
+                |r| r.get(0),
+            )?;
+            Ok(bytes.max(0) as u64)
         })
     }
 

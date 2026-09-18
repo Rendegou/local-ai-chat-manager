@@ -207,7 +207,19 @@ pub fn scan(
 
         let existing = db.get_session(&session_id)?;
         // 强制解析或首次见到 → 直接算哈希并解析；否则先比 size+mtime
-        let (decision, content_hash) = if options.force || existing.is_none() {
+        let (decision, content_hash) = if let Some(revision) = descriptor.content_revision.as_deref()
+        {
+            // SQLite 类数据源（如 Cursor）：直接比对内容版本号，
+            // 避免对共享的巨型 db 文件反复 size+mtime+hash
+            let stored = fingerprints
+                .get(&primary_path)
+                .and_then(|row| row.hash.as_deref());
+            if !options.force && existing.is_some() && stored == Some(revision) {
+                (Decision::Unchanged, Some(revision.to_string()))
+            } else {
+                (Decision::Changed, Some(revision.to_string()))
+            }
+        } else if options.force || existing.is_none() {
             match fingerprint::hash_file(&descriptor.primary_file) {
                 Ok(hash) => (Decision::Changed, Some(hash)),
                 Err(err) => {
@@ -337,6 +349,13 @@ pub fn scan(
 
     // ---- 5. 清理：原始文件已消失的本机会话 ----
     // 仅当该会话属于本轮扫描过的本地数据源时才删除，避免误删仓库来源的会话
+    // revision 型数据源（如 Cursor，一行 db 记录对应一个会话）的 primary_file 是伪路径，
+    // 磁盘上不存在对应文件，不参与「文件消失则删除」的判定
+    let revision_ids: std::collections::HashSet<String> = work
+        .iter()
+        .filter(|(_, _, d)| d.content_revision.is_some())
+        .map(|(_, _, d)| d.session_id())
+        .collect();
     for (id, primary_file, source, status) in db.local_session_files()? {
         let managed_locally = adapters.iter().any(|a| !a.is_remote() && a.id() == source);
         // 只清理本机拥有且仍在索引中的会话；仓库来源 / 已归档的不动
@@ -344,7 +363,7 @@ pub fn scan(
             status,
             SyncStatus::Local | SyncStatus::Synced | SyncStatus::Modified
         );
-        if !managed_locally || !owned || !local_ids.contains(&id) {
+        if !managed_locally || !owned || !local_ids.contains(&id) || revision_ids.contains(&id) {
             continue;
         }
         if let Some(path) = primary_file {

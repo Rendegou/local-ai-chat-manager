@@ -30,13 +30,22 @@ impl Env {
         let repo = tmp.path().join("AIChatRepo");
         let data = tmp.path().join("data");
         std::fs::create_dir_all(&repo).unwrap();
+        // 显式指向空目录：测试不应扫描开发机上的真实 Cursor / ZCode 数据
+        let empty_cursor = tmp.path().join("empty-cursor");
+        let empty_zcode = tmp.path().join("empty-zcode");
+        std::fs::create_dir_all(&empty_cursor).unwrap();
+        std::fs::create_dir_all(&empty_zcode).unwrap();
 
         let settings = AppSettings {
             kimi_path: Some(fixtures().join("kimi/normal").display().to_string()),
             codex_path: Some(fixtures().join("codex/normal").display().to_string()),
+            cursor_path: Some(empty_cursor.display().to_string()),
+            zcode_path: Some(empty_zcode.display().to_string()),
             sync_repo: Some(repo.display().to_string()),
             // 归档阈值设得很大，避免影响其他用例
             archive_after_days: 100_000,
+            // 本用例需要覆盖可选的原始文件复制能力。
+            keep_raw_files: true,
             ..Default::default()
         };
         settings.save(&data).unwrap();
@@ -48,6 +57,63 @@ impl Env {
             repo,
         }
     }
+}
+
+#[test]
+fn 关闭原始副本后下次同步会清理仓库但保留源文件() {
+    let env = Env::new();
+    env.library.scan(false, &mut |_| {}).expect("扫描");
+    env.library
+        .sync_now(
+            &aichat_core::sync::SyncOptions {
+                push: false,
+                ..Default::default()
+            },
+            &mut |_| {},
+        )
+        .expect("首次同步");
+
+    let kimi = env
+        .library
+        .list_sessions(&SessionFilter::default(), 50, 0)
+        .expect("会话列表")
+        .into_iter()
+        .find(|session| session.source == "kimi")
+        .expect("Kimi 会话");
+    let snapshot_dir = env
+        .repo
+        .join("kimi")
+        .join(env.library.machine_id())
+        .join(&kimi.external_id);
+    assert!(snapshot_dir.join("raw").is_dir(), "首次同步应包含 raw");
+
+    let source_file = PathBuf::from(kimi.primary_file.as_deref().expect("会话源文件路径"));
+    let source_before = std::fs::read(&source_file).expect("读取源文件");
+    let mut settings = env.library.settings();
+    settings.keep_raw_files = false;
+    env.library.update_settings(settings).expect("关闭原始副本");
+    env.library
+        .sync_now(
+            &aichat_core::sync::SyncOptions {
+                push: false,
+                ..Default::default()
+            },
+            &mut |_| {},
+        )
+        .expect("清理同步");
+
+    assert!(
+        !snapshot_dir.join("raw").exists(),
+        "关闭后应删除同步仓库里的 raw 副本"
+    );
+    let meta = aichat_core::sync::snapshot::read_meta(&snapshot_dir.join("meta.json"))
+        .expect("读取快照元数据");
+    assert!(!meta.has_raw);
+    assert_eq!(
+        std::fs::read(&source_file).expect("再次读取源文件"),
+        source_before,
+        "清理同步仓库不得修改本机源文件"
+    );
 }
 
 #[test]
@@ -299,12 +365,18 @@ fn 同步仓库会话作为第三数据源被索引() {
     let other_data = env.repo.parent().unwrap().join("data-b");
     let empty_kimi = env.repo.parent().unwrap().join("empty-kimi");
     let empty_codex = env.repo.parent().unwrap().join("empty-codex");
+    let empty_cursor = env.repo.parent().unwrap().join("empty-cursor-b");
+    let empty_zcode = env.repo.parent().unwrap().join("empty-zcode-b");
     std::fs::create_dir_all(&empty_kimi).unwrap();
     std::fs::create_dir_all(&empty_codex).unwrap();
+    std::fs::create_dir_all(&empty_cursor).unwrap();
+    std::fs::create_dir_all(&empty_zcode).unwrap();
     let settings = AppSettings {
         sync_repo: Some(env.repo.display().to_string()),
         kimi_path: Some(empty_kimi.display().to_string()),
         codex_path: Some(empty_codex.display().to_string()),
+        cursor_path: Some(empty_cursor.display().to_string()),
+        zcode_path: Some(empty_zcode.display().to_string()),
         ..Default::default()
     };
     settings.save(&other_data).unwrap();

@@ -88,9 +88,16 @@ fn 扫描与归档都不修改原始文件() {
 
     // ---- 扫描（解析 + 建索引）----
     let data_dir = tmp.path().join("data");
+    // 显式指向空目录：测试不应扫描开发机上的真实 Cursor / ZCode 数据
+    let empty_cursor = tmp.path().join("cursor-home");
+    let empty_zcode = tmp.path().join("zcode-home");
+    std::fs::create_dir_all(&empty_cursor).expect("创建空 Cursor 目录");
+    std::fs::create_dir_all(&empty_zcode).expect("创建空 ZCode 目录");
     let settings = AppSettings {
         kimi_path: Some(kimi_root.display().to_string()),
         codex_path: Some(codex_root.display().to_string()),
+        cursor_path: Some(empty_cursor.display().to_string()),
+        zcode_path: Some(empty_zcode.display().to_string()),
         sync_repo: Some(tmp.path().join("repo").display().to_string()),
         ..Default::default()
     };
@@ -164,11 +171,17 @@ fn 凭证目录不会被读取或同步() {
     let data_dir = tmp.path().join("data");
     let repo = tmp.path().join("repo");
     let empty_codex = tmp.path().join("codex-home");
+    let empty_cursor = tmp.path().join("cursor-home");
+    let empty_zcode = tmp.path().join("zcode-home");
     std::fs::create_dir_all(&empty_codex).expect("创建空 Codex 目录");
+    std::fs::create_dir_all(&empty_cursor).expect("创建空 Cursor 目录");
+    std::fs::create_dir_all(&empty_zcode).expect("创建空 ZCode 目录");
     let settings = AppSettings {
         kimi_path: Some(kimi_root.display().to_string()),
         // 显式指向空目录：测试不应扫描开发机上的真实会话
         codex_path: Some(empty_codex.display().to_string()),
+        cursor_path: Some(empty_cursor.display().to_string()),
+        zcode_path: Some(empty_zcode.display().to_string()),
         sync_repo: Some(repo.display().to_string()),
         ..Default::default()
     };

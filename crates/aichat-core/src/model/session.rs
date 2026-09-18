@@ -16,6 +16,8 @@ use super::message::NormalizedMessage;
 pub enum SourceKind {
     Codex,
     Kimi,
+    Cursor,
+    Zcode,
 }
 
 impl SourceKind {
@@ -24,6 +26,8 @@ impl SourceKind {
         match self {
             SourceKind::Codex => "codex",
             SourceKind::Kimi => "kimi",
+            SourceKind::Cursor => "cursor",
+            SourceKind::Zcode => "zcode",
         }
     }
 
@@ -32,6 +36,8 @@ impl SourceKind {
         match self {
             SourceKind::Codex => "Codex",
             SourceKind::Kimi => "Kimi Code",
+            SourceKind::Cursor => "Cursor",
+            SourceKind::Zcode => "ZCode",
         }
     }
 
@@ -40,12 +46,19 @@ impl SourceKind {
         match s.trim().to_ascii_lowercase().as_str() {
             "codex" => Some(SourceKind::Codex),
             "kimi" | "kimi-code" | "kimicode" => Some(SourceKind::Kimi),
+            "cursor" => Some(SourceKind::Cursor),
+            "zcode" | "z-code" => Some(SourceKind::Zcode),
             _ => None,
         }
     }
 
     /// 全部数据源，用于 UI 列表与扫描循环。
-    pub const ALL: [SourceKind; 2] = [SourceKind::Codex, SourceKind::Kimi];
+    pub const ALL: [SourceKind; 4] = [
+        SourceKind::Codex,
+        SourceKind::Kimi,
+        SourceKind::Cursor,
+        SourceKind::Zcode,
+    ];
 }
 
 /// 原始文件引用：参与指纹校验与「保留原始文件」快照复制。
@@ -110,6 +123,12 @@ pub struct SessionDescriptor {
     pub machine_id: Option<String>,
     /// 参与指纹校验的文件（一般只含主文件，避免哈希无意义的大目录）
     pub files: Vec<RawFileRef>,
+    /// 内容版本号（SQLite 类数据源的增量依据，如 Cursor 的 lastUpdatedAt）。
+    ///
+    /// 设置后扫描器不再对 `primary_file` 做 size+mtime+hash 判断：
+    /// 与已存指纹相同视为未变化，不同则以该值作为内容哈希直接重解析。
+    #[serde(default)]
+    pub content_revision: Option<String>,
 }
 
 impl SessionDescriptor {

@@ -236,6 +236,47 @@ pub fn codex_root_candidates(manual: Option<&Path>) -> Vec<PathBuf> {
     dedup_paths(list)
 }
 
+/// 默认 Cursor 数据根目录（globalStorage，内含 `state.vscdb`）。
+///
+/// Cursor 是桌面 IDE，数据目录与 VS Code 一致：
+/// - Windows: `%APPDATA%/Cursor/User/globalStorage`
+/// - macOS: `~/Library/Application Support/Cursor/User/globalStorage`
+/// - Linux: `$XDG_CONFIG_HOME/Cursor/User/globalStorage` 或 `~/.config/Cursor/User/globalStorage`
+///
+/// Windows 之外的平台未实测，返回 `None`（由探测逻辑报告「未找到」）。
+pub fn default_cursor_root() -> Option<PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(dir) = std::env::var_os("APPDATA") {
+            let p = PathBuf::from(dir);
+            if !p.as_os_str().is_empty() {
+                return Some(p.join("Cursor").join("User").join("globalStorage"));
+            }
+        }
+        if let Some(home) = home_dir() {
+            return Some(
+                home.join("AppData")
+                    .join("Roaming")
+                    .join("Cursor")
+                    .join("User")
+                    .join("globalStorage"),
+            );
+        }
+        return None;
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        None
+    }
+}
+
+/// 默认 ZCode 会话根目录：`~/.zcode/v2/sessions`（本机实测）。
+pub fn default_zcode_root() -> PathBuf {
+    home_dir()
+        .map(|h| h.join(".zcode").join("v2").join("sessions"))
+        .unwrap_or_else(|| PathBuf::from(".zcode").join("v2").join("sessions"))
+}
+
 /// 去重并保持顺序。
 pub fn dedup_paths(list: Vec<PathBuf>) -> Vec<PathBuf> {
     let mut seen: Vec<String> = Vec::with_capacity(list.len());
@@ -371,6 +412,18 @@ mod tests {
         )));
         assert!(is_forbidden_path(Path::new("/x/.codex/auth.json")));
         assert!(is_forbidden_path(Path::new("/x/secrets/foo")));
+        // ZCode 的凭证文件（~/.zcode/v2/credentials.json）
+        assert!(is_forbidden_path(Path::new(
+            r"C:\Users\u\.zcode\v2\credentials.json"
+        )));
+        // Cursor 会话伪路径（db 路径 + #composerId）不得被误判
+        assert!(!is_forbidden_path(Path::new(
+            r"C:\Users\u\AppData\Roaming\Cursor\User\globalStorage\state.vscdb#ab12cd34"
+        )));
+        // ZCode 会话文件不受影响
+        assert!(!is_forbidden_path(Path::new(
+            r"C:\Users\u\.zcode\v2\sessions\a1b2c3\task-0001.json"
+        )));
         // 正常会话文件不受影响
         assert!(!is_forbidden_path(Path::new(
             r"C:\Users\u\.kimi-code\sessions\wd_a\ses_b\agents\main\wire.jsonl"

@@ -5,11 +5,14 @@
 //! ├── meta.json           # 会话元信息（带 schemaVersion）
 //! ├── conversation.jsonl  # 归一化消息流（Git 可 diff 的文本）
 //! └── raw/                # 可选：原始会话文件副本（Keep Raw Session Files）
+//! <repo>/.aichat/blobs/<hash前2位>/<hash>.txt   # ≥ BLOB_THRESHOLD 文本的内容寻址存储（schema v2）
 //! ```
 //!
 //! 关键点：
 //! - 写入采用「临时文件 + 重命名」，避免中断留下半截文件；
 //! - 内容哈希一致则跳过写入（`git add` 时不会有变更，减少提交噪声）；
+//! - ≥ [`BLOB_THRESHOLD`] 的消息文本按 blake3 内容寻址去重：相同文本全仓库只存一份，
+//!   jsonl 行改写为 `textRef` / `textBytes`；外置失败时该行降级为内联，绝不丢内容；
 //! - 复制原始文件时过滤隐私红线目录（credentials 等），绝不提交凭证。
 
 use std::io::Write;
@@ -21,7 +24,29 @@ use crate::model::{
 };
 use crate::paths;
 use crate::storage::db::Database;
-use crate::storage::sessions::SessionSummary;
+use crate::storage::sessions::{MessageRow, SessionSummary};
+
+/// 文本外置阈值（字节）：达到该长度的消息文本存入 `.aichat/blobs/`，jsonl 只留引用。
+pub const BLOB_THRESHOLD: usize = 4096;
+
+/// blob 文件路径：`<repo>/.aichat/blobs/<hash前2位>/<hash>.txt`。
+pub fn blob_path(repo_root: &Path, hash: &str) -> PathBuf {
+    repo_root
+        .join(".aichat")
+        .join("blobs")
+        .join(&hash[..hash.len().min(2)])
+        .join(format!("{hash}.txt"))
+}
+
+/// 单个写入会话的快照记录。
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SnapshotEntry {
+    /// 仓库内相对路径（会话目录）
+    pub rel_path: String,
+    /// 该会话快照目录的总字节数
+    pub bytes: u64,
+}
 
 /// 快照写入结果。
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
@@ -31,8 +56,8 @@ pub struct SnapshotReport {
     pub skipped: usize,
     pub failed: usize,
     pub bytes: u64,
-    /// 写入的相对路径（用于日志与 UI 展示）
-    pub files: Vec<String>,
+    /// 写入的会话（相对路径 + 大小，用于日志与 UI 展示）
+    pub files: Vec<SnapshotEntry>,
     pub warnings: Vec<String>,
 }
 
@@ -91,14 +116,25 @@ pub fn snapshot_session(
         let mut writer = std::io::BufWriter::with_capacity(256 * 1024, file);
         // 流式导出：一次只持有一条消息，100MB 级会话也不会整体进内存
         let written = db.for_each_message(&summary.id, &mut |row| {
-            let line = serde_json::json!({
-                "id": row.id,
-                "role": row.role,
-                "kind": row.kind,
-                "timestamp": row.timestamp,
-                "text": row.text,
-                "toolName": row.tool_name,
-            });
+            let line = match row.text.as_deref() {
+                // 大文本外置为内容寻址 blob；失败时降级为内联，绝不因去重丢内容
+                Some(text) if text.len() >= BLOB_THRESHOLD => match write_blob(repo_root, text) {
+                    Ok(hash) => serde_json::json!({
+                        "id": row.id,
+                        "role": row.role,
+                        "kind": row.kind,
+                        "timestamp": row.timestamp,
+                        "toolName": row.tool_name,
+                        "textRef": format!("blake3:{hash}"),
+                        "textBytes": text.len(),
+                    }),
+                    Err(err) => {
+                        tracing::warn!(error = %err, "外置大文本失败，该行降级为内联存储");
+                        inline_line(row)
+                    }
+                },
+                _ => inline_line(row),
+            };
             let mut bytes = serde_json::to_vec(&line)?;
             bytes.push(b'\n');
             hasher.update(&bytes);
@@ -116,6 +152,13 @@ pub fn snapshot_session(
             .map_err(|e| Error::io(&conversation_tmp, e))?;
     }
     let content_hash = hasher.finalize().to_hex().to_string();
+
+    // 关闭原始副本后，清理仓库中该会话已有的 raw/。
+    // 这只操作独立同步仓库，不会触碰 Codex / Kimi 的源文件。
+    let raw_dir = dir.join("raw");
+    if !keep_raw && raw_dir.is_dir() {
+        std::fs::remove_dir_all(&raw_dir).map_err(|e| Error::io(&raw_dir, e))?;
+    }
 
     // ---- 2. 内容与仓库一致 → 跳过 ----
     let meta_path = dir.join("meta.json");
@@ -164,6 +207,33 @@ pub fn snapshot_session(
 
     let rel = paths::relative_posix(repo_root, &dir).unwrap_or_else(|| display_path(&dir));
     Ok(SnapshotOutcome::Written(rel))
+}
+
+/// 单条消息的内联 jsonl 行（< [`BLOB_THRESHOLD`] 或外置失败降级时使用）。
+fn inline_line(row: &MessageRow) -> serde_json::Value {
+    serde_json::json!({
+        "id": row.id,
+        "role": row.role,
+        "kind": row.kind,
+        "timestamp": row.timestamp,
+        "text": row.text,
+        "toolName": row.tool_name,
+    })
+}
+
+/// 把大文本写入内容寻址 blob，返回 blake3 hex；相同文本已存在时直接复用。
+fn write_blob(repo_root: &Path, text: &str) -> std::io::Result<String> {
+    let hash = blake3::hash(text.as_bytes()).to_hex().to_string();
+    let path = blob_path(repo_root, &hash);
+    if !path.is_file() {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let tmp = path.with_extension("txt.tmp");
+        std::fs::write(&tmp, text.as_bytes())?;
+        std::fs::rename(&tmp, &path)?;
+    }
+    Ok(hash)
 }
 
 /// 复制原始会话文件到 `raw/`；返回是否复制了任何文件。

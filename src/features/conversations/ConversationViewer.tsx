@@ -16,7 +16,7 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 import * as ipc from '../../lib/ipc'
-import { formatDateTime, kindLabel, roleLabel, sourceLabel, syncStatusLabel } from '../../lib/format'
+import { formatDateTime, kindLabel, roleLabel, sourceLabel, sourceTextClass, syncStatusLabel } from '../../lib/format'
 import { useVirtual } from '../../hooks/useVirtual'
 import { useLibrary } from '../../stores/library'
 import type { MessageRow } from '../../types/ipc'
@@ -285,7 +285,7 @@ export function ConversationViewer() {
         title={selected.title ?? '无标题'}
         meta={
           <>
-            <span className={selected.source === 'kimi' ? 'text-kimi' : 'text-codex'}>
+            <span className={sourceTextClass(selected.source)}>
               {sourceLabel(selected.source)}
             </span>
             <span className="px-1.5 text-ink-faint">·</span>

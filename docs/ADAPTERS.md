@@ -129,6 +129,58 @@ rollout 的行结构（顶层统一为 `{timestamp, ordinal, type, payload}`）�
 
 ---
 
+## ZCode
+
+### 真实目录结构（依据本机 `~/.zcode` 实测）
+
+```text
+~/.zcode/v2/sessions/<hex 目录>/<taskId>.json
+```
+
+单文件 JSON：`meta`（`taskId` / `title` / `workspacePath` / `createdAt` / `updatedAt`（毫秒）/ `status`）
++ `messages[]`（`role` / `content`）。消息本身无时间戳字段。
+
+### 映射约定
+
+- external_id = 文件名去掉 `.json`；标题/项目/时间取自 `meta`；
+- `role`：`user` / `assistant` 映射为消息，未知 role 记为事件消息并 `note_unknown`；
+- `~/.zcode/v2/credentials.json` 等凭证文件走 `paths::is_forbidden_path`，永不读取、永不复制。
+
+---
+
+## Cursor
+
+### 真实存储（依据本机 `%APPDATA%/Cursor` 实测；逆向格式，无官方文档）
+
+会话在 SQLite `%APPDATA%/Cursor/User/globalStorage/state.vscdb`（WAL 模式，只读打开）：
+
+| 表 | 内容 |
+| --- | --- |
+| `composerHeaders` | 会话元数据：`composerId` / `workspaceId` / `createdAt` / `lastUpdatedAt`（毫秒）/ `isArchived` / `isSubagent`；`value` JSON 里有标题 `name` |
+| `cursorDiskKV` | 消息体：key = `bubbleId:<composerId>:<bubbleId>`，value 为气泡 JSON |
+
+### 归一化约定
+
+- external_id = `composerId`；排除 `isArchived=1` 与 `empty-state-draft`；
+- bubble 的 `type`：1 = 用户，2 = 助手；`text` 为正文；`thinking` → 推理摘要；
+  `toolFormerData`（`name` / `params` / `result` / `status`）→ 工具调用 + 工具结果；
+- 排序按 bubble 内的 `createdAt`（ISO8601，约 4% 缺失），缺失者按 key 字典序排在最前——
+  实测 key 字典序与创建顺序全部错位，不能拿 key 当时序；
+- 未知字段 / 未知 type：计数 + raw 片段 + `partial`，不静默丢弃。
+
+### 增量指纹（SQLite 数据源的关键差异）
+
+全部会话共用一个 db 文件，不能靠文件指纹。每个 composer 的
+`content_revision = lastUpdatedAt`（NULL 时兜底 `createdAt` → `"0"`），
+指纹 key 用伪路径 `state.vscdb#<composerId>`，扫描器直接比对版本号，
+不重新哈希几百 MB 的 db。
+
+### 隐私
+
+只读打开、永不写回；`raw_files` 为空（会话是 db 行，不复制整个 db——那包含所有会话）。
+
+---
+
 ## 同步仓库 Adapter（第三种数据源）
 
 把 `Sync Repo` 中其他机器写入的快照当作数据源读取：

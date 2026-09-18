@@ -15,7 +15,7 @@
 
 | 限制 | 说明 |
 | --- | --- |
-| 只支持 Codex / Kimi Code | 其他工具需要新增 Adapter（接口已抽象好） |
+| 支持 Codex / Kimi Code / Cursor / ZCode | Cursor 与 ZCode 的存储格式属逆向工程（无官方文档），它们升级后映射可能失效；失效表现为会话标记 `partial`，不影响其他数据源。其他工具需要新增 Adapter（接口已抽象好） |
 | Kimi 子 Agent 不进入主聊天 | `agents/agent-*/wire.jsonl` 只备份与登记，不参与主视图 |
 | Codex 多 rollout 会话只取最新一份 | 同一 session 的多个 rollout 文件，以 mtime 最新者为内容来源，其余作为 `raw` 附件备份 |
 | 标题可能缺失 | Codex 无 `thread_name` 且首条用户消息是系统注入内容时，标题显示为「无标题」 |
@@ -37,6 +37,7 @@
 | 限制 | 说明 |
 | --- | --- |
 | 冲突不自动合并 | 检测到冲突只报告并提供「中止 Rebase / 重试 / 打开仓库」 |
+| 快照大文本外置（schema v2） | ≥4KB 文本去重存于 `.aichat/blobs/`；旧版本应用读 v2 快照时外置消息文本为空，各机器需保持应用版本一致；blob 不做 GC |
 | 依赖系统 git | 不内置 libgit2；凭据、SSH、代理等由用户本机 git 配置决定 |
 | 归档不支持增量 | 归档是整会话打包；恢复后需要重新扫描（会自动进行） |
 | 归档体积 | 使用 zstd level 3（速度优先）；不对已归档文件做二次压缩优化 |

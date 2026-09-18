@@ -9,7 +9,7 @@
 import { useMemo, useState } from 'react'
 
 import * as ipc from '../../lib/ipc'
-import { baseName, formatDateTime, formatRelative, sourceLabel } from '../../lib/format'
+import { baseName, formatDateTime, formatRelative, sourceLabel, sourceTone } from '../../lib/format'
 import { useLibrary } from '../../stores/library'
 import type { SearchResponse, SessionFilter } from '../../types/ipc'
 import {
@@ -208,8 +208,8 @@ export function SearchPage() {
           {/* 高级筛选：默认收起，功能与之前完全一致 */}
           {advancedOpen ? (
             <div className="section-card mt-3 rounded-panel p-4">
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <label className="flex flex-col gap-1 text-meta text-ink-muted">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                <label className="flex min-w-0 flex-col gap-1 text-meta text-ink-muted">
                   来源
                   <Select
                     value={source}
@@ -218,10 +218,12 @@ export function SearchPage() {
                       { value: '', label: '全部数据源' },
                       { value: 'codex', label: 'Codex' },
                       { value: 'kimi', label: 'Kimi Code' },
+                      { value: 'cursor', label: 'Cursor' },
+                      { value: 'zcode', label: 'ZCode' },
                     ]}
                   />
                 </label>
-                <label className="flex flex-col gap-1 text-meta text-ink-muted">
+                <label className="flex min-w-0 flex-col gap-1 text-meta text-ink-muted">
                   项目
                   <Select
                     value={project}
@@ -235,7 +237,7 @@ export function SearchPage() {
                     ]}
                   />
                 </label>
-                <label className="flex flex-col gap-1 text-meta text-ink-muted">
+                <label className="flex min-w-0 flex-col gap-1 text-meta text-ink-muted">
                   设备
                   <Select
                     value={machine}
@@ -246,16 +248,14 @@ export function SearchPage() {
                     ]}
                   />
                 </label>
-                <div className="flex items-end gap-2">
-                  <label className="flex flex-1 flex-col gap-1 text-meta text-ink-muted">
-                    起始
-                    <DateInput value={from} onChange={(event) => setFrom(event.target.value)} />
-                  </label>
-                  <label className="flex flex-1 flex-col gap-1 text-meta text-ink-muted">
-                    结束
-                    <DateInput value={to} onChange={(event) => setTo(event.target.value)} />
-                  </label>
-                </div>
+                <label className="flex min-w-0 flex-col gap-1 text-meta text-ink-muted">
+                  起始
+                  <DateInput value={from} onChange={(event) => setFrom(event.target.value)} />
+                </label>
+                <label className="flex min-w-0 flex-col gap-1 text-meta text-ink-muted">
+                  结束
+                  <DateInput value={to} onChange={(event) => setTo(event.target.value)} />
+                </label>
               </div>
               <div className="flex items-center justify-between pt-2.5">
                 <Toggle
@@ -313,7 +313,7 @@ export function SearchPage() {
             >
               {/* 第一行：来源 + 会话标题 + 时间（项目路径降到第三行，不再与标题抢宽度） */}
               <div className="flex min-w-0 items-center gap-2">
-                <StatusPill size="sm" tone={hit.source === 'kimi' ? 'kimi' : 'codex'}>
+                <StatusPill size="sm" tone={sourceTone(hit.source)}>
                   {sourceLabel(hit.source)}
                 </StatusPill>
                 <span className="min-w-0 flex-1 truncate text-body font-medium text-ink">

@@ -10,13 +10,19 @@ import { useState } from 'react'
 
 import { useLibrary } from '../../stores/library'
 import { Button, Dot, Icon, IconButton, SectionLabel, SidebarRow, StatusPill } from '../../components/ui'
-import { baseName, formatRelative } from '../../lib/format'
+import { baseName, formatRelative, sourceLabel, sourceTone } from '../../lib/format'
 
 export function SourceSidebar() {
   const { sources, projects, filter, setFilter, stats, scan, scanning } = useLibrary()
   const [copied, setCopied] = useState<string | null>(null)
 
   const sourceRow = (id: string) => sources.find((s) => s.id === id)
+  // 固定顺序展示已知数据源，后端将来新增的数据源排在后面，避免漏展示
+  const SOURCE_ORDER = ['codex', 'kimi', 'cursor', 'zcode']
+  const sourceIds = [
+    ...SOURCE_ORDER,
+    ...sources.map((s) => s.id).filter((id) => !SOURCE_ORDER.includes(id)),
+  ]
 
   /** 复制项目路径（失败时静默，避免打断浏览）。 */
   const copyPath = (path: string) => {
@@ -37,7 +43,7 @@ export function SourceSidebar() {
           label="全部会话"
           count={stats?.sessions ?? 0}
         />
-        {(['codex', 'kimi'] as const).map((id) => {
+        {sourceIds.map((id) => {
           const row = sourceRow(id)
           return (
             <SidebarRow
@@ -45,8 +51,8 @@ export function SourceSidebar() {
               active={filter.source === id && !filter.projectPath}
               onClick={() => setFilter({ source: id, projectPath: null, onlyArchived: false })}
               title={row?.rootPath ?? '未探测到目录'}
-              icon={<Dot tone={id === 'kimi' ? 'kimi' : 'codex'} />}
-              label={row?.displayName ?? id}
+              icon={<Dot tone={sourceTone(id)} />}
+              label={row?.displayName ?? sourceLabel(id)}
               count={row?.sessionHint ?? 0}
             />
           )
@@ -60,7 +66,7 @@ export function SourceSidebar() {
           {projects.length === 0 ? (
             <div className="flex flex-col items-start gap-2 px-1.5 py-2">
               <p className="text-meta leading-5 text-ink-muted">
-                还没有项目。扫描本机 Codex / Kimi Code 会话后，这里会按项目分组。
+                还没有项目。扫描本机 AI 编程工具的会话后，这里会按项目分组。
               </p>
               <Button size="sm" onClick={() => void scan(false)} loading={scanning}>
                 扫描

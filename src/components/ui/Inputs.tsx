@@ -62,7 +62,7 @@ export function DateInput({
   return (
     <input
       type="date"
-      className={`field h-9 w-full px-3 text-body text-ink ${className}`}
+      className={`field h-9 min-w-0 w-full px-3 text-body text-ink ${className}`}
       {...rest}
     />
   )
