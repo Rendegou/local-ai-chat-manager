@@ -1,20 +1,23 @@
 /**
- * 同步页（规格 §6.3）。
+ * 同步页（规格 §6.3；信息架构见 docs/DESIGN.md §10）。
  *
- * 按「风险与任务顺序」重组，而不是技术信息平铺：
- * 1. 仓库与同步健康状态；
- * 2. 推荐的下一步操作；
- * 3. 待同步内容摘要（含隐私提醒）；
- * 4. 上一次同步结果；
- * 5. 归档 / 日志 / 高级诊断（默认收起）。
- *
- * 冲突处理保持原有可靠性文案（不自动合并、不丢数据），并放在最显眼的位置。
+ * 重构要点（docs/DESIGN_AUDIT.md §6）：
+ * 1. Header 只留「刷新」和「打开仓库」——原来 Header 和「下一步」提示里各有一颗
+ *    「立即同步」，用户看到两个语义完全相同的主按钮；
+ * 2. 独立的「下一步」Notice 被合并进一个扁平 `SyncSummary`，按**决策顺序**排列：
+ *    仓库 → 远端 → 分支 → 最近拉取/推送 → 待同步会话/字节/本地变更/ahead·behind
+ *    → 隐私提示 → 推荐下一步 → 唯一主操作。
+ *    原先把「待同步会话数」「预计写入字节」放在按钮**下方**，等于先让人按按钮再告诉他
+ *    会推送多少数据离开本机；
+ * 3. 主操作按状态唯一决定，`clean` 状态不显示强 Primary；
+ * 4. 普通状态不再使用大型彩色 Notice——只有错误、冲突、隐私风险才用。
  */
 import { useEffect, useState } from 'react'
 import { openPath } from '@tauri-apps/plugin-opener'
 
 import * as ipc from '../../lib/ipc'
-import { formatBytes, formatDateTime, formatRelative } from '../../lib/format'
+import { formatBytes, formatDateTime, formatDuration, formatRelative } from '../../lib/format'
+import { useT } from '../../lib/i18n'
 import { useSync } from '../../stores/sync'
 import { useLibrary } from '../../stores/library'
 import {
@@ -26,13 +29,17 @@ import {
   ListRow,
   Notice,
   PanelHeader,
-  SectionCard,
+  Section,
   Spinner,
   StatusPill,
   TextInput,
 } from '../../components/ui'
 
+/** 唯一主操作的种类；null = 当前状态不需要强 Primary（clean / conflict）。 */
+type PrimaryKind = 'settings' | 'saveRemote' | 'sync' | 'retry' | null
+
 export function SyncPage() {
+  const t = useT()
   const {
     status,
     report,
@@ -73,87 +80,80 @@ export function SyncPage() {
   const conflict = status?.conflict ?? report?.conflict ?? null
   const pending = status?.pendingSessions ?? 0
   const changes = status?.localChanges ?? 0
+  const ahead = status?.ahead ?? 0
   // 设置里已保存远端地址时，同步会自动应用，视为已配置
   const remoteConfigured = Boolean(status?.remote || status?.settingsRemote)
   const failedSteps = report?.steps.filter((step) => !step.ok) ?? []
   const pushAuthFailed = failedSteps.some((step) => step.detail.includes('publickey'))
+  /** 真的有数据会离开本机时才提醒隐私——clean 状态下这条提醒只是噪音。 */
+  const willSendData = pending > 0 || changes > 0 || ahead > 0
 
-  /** 根据状态给出「推荐的下一步」（规格 §6.3 第 2 点）。 */
-  const nextStep = (() => {
-    if (conflict) {
-      return {
-        tone: 'danger' as const,
-        action: null,
-        title: '先处理同步冲突',
-        body: '存在未合并文件。仓库不会被自动合并，也不会丢弃任何一边。',
-      }
-    }
-    if (!repoConfigured) {
-      return {
-        tone: 'info' as const,
-        action: 'settings' as const,
-        title: '先绑定同步仓库',
-        body: '选择一个目录作为同步仓库（会自动 git init），之后才能在多台电脑之间同步。',
-      }
-    }
-    if (!remoteConfigured) {
-      return {
-        tone: 'warning' as const,
-        action: 'saveRemote' as const,
-        title: '还没有配置远端',
-        body: '只配置仓库不配置远端时，同步只能在本机提交，无法跨设备。',
-      }
-    }
-    if (failedSteps.length > 0) {
-      return {
-        tone: 'danger' as const,
-        action: 'sync' as const,
-        title: '上一次同步未完全成功',
-        body: '本地提交已完成，但有步骤失败（见上方详情）。修复后点击「立即同步」重试。',
-      }
-    }
-    if (pending > 0 || changes > 0) {
-      return {
-        tone: 'accent' as const,
-        action: 'sync' as const,
-        title: `有 ${pending} 个会话待同步`,
-        body: '点击「立即同步」写入快照、提交并推送；冲突时不会自动合并。',
-      }
-    }
-    if (status?.remote && !status?.lastPush) {
-      return {
-        tone: 'warning' as const,
-        action: 'sync' as const,
-        title: '还没有成功推送到远端',
-        body: '远端已配置但首次推送尚未成功。点击「立即同步」重试；认证失败时优先换用 https:// 地址。',
-      }
-    }
-    if ((status?.ahead ?? 0) > 0) {
-      return {
-        tone: 'warning' as const,
-        action: 'sync' as const,
-        title: `本地有 ${status?.ahead ?? 0} 个提交未推送`,
-        body: '提交已在本地仓库，但远端还没有。点击「立即同步」推送。',
-      }
-    }
-    return {
-      tone: 'success' as const,
-      action: null,
-      title: '已是最新状态',
-      body: '本机会话都已写入仓库，远端也没有新的提交。',
-    }
+  /** 唯一主操作：状态决定种类，同一屏内绝不超过一个。 */
+  const primary: PrimaryKind = (() => {
+    if (conflict) return null
+    if (!repoConfigured) return 'settings'
+    if (!remoteConfigured) return 'saveRemote'
+    if (failedSteps.length > 0) return 'retry'
+    if (pending > 0 || changes > 0 || ahead > 0) return 'sync'
+    if (status?.remote && !status?.lastPush) return 'sync'
+    return null
   })()
+
+  /** 推荐下一步的说明文案（纯文本，不再是一整块彩色 Notice）。 */
+  const nextStepText = (() => {
+    if (conflict) return t('sync.nextConflictBody')
+    if (!repoConfigured) return t('sync.nextBindBody')
+    if (!remoteConfigured) return t('sync.nextRemoteBody')
+    if (failedSteps.length > 0) return t('sync.nextFailedBody')
+    if (pending > 0) return t('sync.nextPendingBody')
+    if (status?.remote && !status?.lastPush) return t('sync.nextPushBody')
+    if (ahead > 0) return t('sync.nextAheadBody')
+    return t('sync.cleanBody')
+  })()
+
+  /** 渲染唯一主操作。 */
+  const primaryButton = primary ? (
+    <Button
+      tone="primary"
+      loading={running}
+      disabled={
+        primary === 'saveRemote' ? !remoteInput.trim() : !repoConfigured && primary !== 'settings'
+      }
+      onClick={() => {
+        if (primary === 'settings') {
+          setPage('settings')
+          return
+        }
+        if (primary === 'saveRemote') {
+          void run({ push: false, setRemote: remoteInput })
+          return
+        }
+        void run({ push: true })
+      }}
+    >
+      {running
+        ? t('sync.syncing')
+        : primary === 'settings'
+          ? t('sync.goSettings')
+          : primary === 'saveRemote'
+            ? t('sync.saveRemoteAndSync')
+            : primary === 'retry'
+              ? t('sync.retrySync')
+              : t('sync.syncNow')}
+    </Button>
+  ) : null
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-canvas">
       <PanelHeader
-        title="同步"
+        headingLevel={1}
+        title={t('sync.title')}
         meta={
           <span className="flex items-center gap-2">
-            <span className="text-tech">{status?.repo ?? '尚未配置同步仓库'}</span>
+            <span className="truncate text-tech">{status?.repo ?? t('sync.noRepo')}</span>
             {status?.isRepo ? (
               <StatusPill tone={conflict ? 'danger' : 'success'}>
-                {conflict ? '冲突待处理' : '仓库正常'}
+                {conflict ? t('sync.conflictPending') : t('sync.repoOk')}
               </StatusPill>
             ) : null}
           </span>
@@ -161,9 +161,9 @@ export function SyncPage() {
         actions={
           <>
             <IconButton
-              label="刷新同步状态"
+              label={t('sync.refresh')}
               onClick={() => void refresh()}
-              className={running ? 'opacity-50' : ''}
+              className={running ? 'opacity-55' : ''}
             >
               <Icon name="refresh" />
             </IconButton>
@@ -174,29 +174,21 @@ export function SyncPage() {
               }}
               disabled={!repoConfigured}
             >
-              打开仓库
-            </Button>
-            <Button
-              tone="primary"
-              onClick={() => void run({ push: true })}
-              loading={running}
-              disabled={!repoConfigured || Boolean(conflict)}
-            >
-              {running ? '同步中…' : '立即同步'}
+              {t('sync.openRepo')}
             </Button>
           </>
         }
       />
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-5">
-        <div className="mx-auto flex w-full max-w-[980px] flex-col gap-4">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
+        <div className="mx-auto flex w-full max-w-[820px] flex-col gap-6">
           {/* 同步执行/刷新失败：此前静默不可见，失败反馈必须持续到用户看到 */}
           {error ? (
             <Notice
               tone="danger"
               title={error.message}
               actions={
-                <IconButton label="关闭错误提示" size="sm" onClick={clearError}>
+                <IconButton label={t('sync.dismissError')} size="sm" onClick={clearError}>
                   <Icon name="close" />
                 </IconButton>
               }
@@ -214,11 +206,11 @@ export function SyncPage() {
                 <>
                   {conflict.inRebase ? (
                     <Button tone="danger" size="sm" onClick={() => void abortRebase()}>
-                      中止 Rebase
+                      {t('sync.abortRebase')}
                     </Button>
                   ) : null}
                   <Button size="sm" onClick={() => void run({ push: true })} disabled={running}>
-                    重试同步
+                    {t('sync.retrySync')}
                   </Button>
                   {status?.repo ? (
                     <Button
@@ -228,16 +220,14 @@ export function SyncPage() {
                         if (status?.repo) void openPath(status.repo)
                       }}
                     >
-                      打开仓库
+                      {t('sync.openRepo')}
                     </Button>
                   ) : null}
                 </>
               }
             >
               <div>{conflict.message}</div>
-              <div className="pt-1 text-meta text-ink-muted">
-                不会自动合并，也不会丢弃任何一边。冲突文件：
-              </div>
+              <div className="pt-1 text-meta text-ink-muted">{t('sync.conflictNote')}</div>
               <ul className="pt-0.5 text-tech text-ink-muted">
                 {conflict.files.map((file) => (
                   <li key={file}>· {file}</li>
@@ -248,122 +238,85 @@ export function SyncPage() {
 
           {/* 步骤级失败（推送认证失败、拉取失败等）：不抛错也要有持续到用户看到的反馈 */}
           {!conflict && failedSteps.length > 0 ? (
-            <Notice
-              tone="danger"
-              title="上一次同步未完全成功"
-              actions={
-                <Button size="sm" onClick={() => void run({ push: true })} disabled={running}>
-                  重试同步
-                </Button>
-              }
-            >
+            <Notice tone="danger" title={t('sync.nextFailedTitle')}>
               <ul>
                 {failedSteps.map((step) => (
                   <li key={step.name}>
-                    · {step.name}：{step.detail || '未知原因'}
+                    · {step.name}：{step.detail || t('sync.unknownReason')}
                   </li>
                 ))}
               </ul>
               {pushAuthFailed ? (
-                <div className="pt-1 text-meta text-ink-muted">
-                  SSH 地址需要本机已配置 key。建议把远端改成 https:// 地址（凭据交给系统 Git
-                  Credential Manager，首次推送会弹窗登录），或先在终端配置 SSH key。
-                </div>
+                <div className="pt-1 text-meta text-ink-muted">{t('sync.sshHint')}</div>
               ) : null}
             </Notice>
           ) : null}
 
           {!repoConfigured ? (
             <EmptyState
-              title="还没有绑定同步仓库"
-              description="在「设置 → 同步与隐私」里选择一个目录作为同步仓库。仓库与 AI 工具的数据目录完全隔离。"
+              title={t('sync.emptyTitle')}
+              description={t('sync.emptyDescription')}
               primaryAction={
                 <Button tone="primary" onClick={() => setPage('settings')}>
-                  去设置同步仓库
+                  {t('sync.emptyPrimary')}
                 </Button>
               }
               secondaryAction={
                 <Button tone="ghost" onClick={() => void loadSessions()}>
-                  跳过，先浏览本机会话
+                  {t('sync.emptySecondary')}
                 </Button>
               }
             />
           ) : (
             <>
-              {/* 1. 同步健康 */}
-              <SectionCard
-                title="同步健康"
-                description="当前仓库、远端与最近一次同步时间"
-                actions={
-                  <StatusPill
-                    tone={nextStep.tone === 'danger' ? 'danger' : status?.behind ? 'warning' : 'success'}
-                  >
-                    {status?.behind ? `远端领先 ${status.behind}` : '无待拉取提交'}
-                  </StatusPill>
-                }
+              {/*
+               * 扁平同步概览：决策所需的信息全部排在唯一主操作**之前**，
+               * 顺序固定为 仓库 → 远端 → 分支 → 时间 → 规模 → 隐私 → 下一步 → 动作。
+               */}
+              <section
+                aria-labelledby="sync-summary-title"
+                className="flex flex-col border-b border-line pb-6"
               >
+                <h2 id="sync-summary-title" className="text-section text-ink">
+                  {t('sync.summaryTitle')}
+                </h2>
+                <p className="pb-2 pt-0.5 text-meta text-ink-muted">{t('sync.summaryDesc')}</p>
+
                 <div className="grid gap-x-6 sm:grid-cols-2">
-                  <Field label="仓库路径" mono>
+                  <Field label={t('sync.fieldRepo')} mono>
                     {status?.repo ?? '—'}
                   </Field>
-                  <Field label="分支" mono>
+                  <Field label={t('sync.fieldBranch')} mono>
                     {status?.branch || '—'}
                   </Field>
-                  <Field label="远端" mono>
-                    {status?.remote ?? '未配置'}
+                  <Field label={t('sync.fieldRemote')} mono>
+                    {status?.remote ?? t('sync.notConfigured')}
                   </Field>
                   <Field label="git" mono>
-                    {status?.gitVersion ?? '未找到 git'}
+                    {status?.gitVersion ?? t('sync.noGit')}
                   </Field>
-                  <Field label="上次拉取">{formatDateTime(status?.lastPull)}</Field>
-                  <Field label="上次推送">{formatDateTime(status?.lastPush)}</Field>
+                  <Field label={t('sync.lastPull')}>{formatDateTime(status?.lastPull)}</Field>
+                  <Field label={t('sync.lastPush')}>{formatDateTime(status?.lastPush)}</Field>
                 </div>
-                {status?.error ? (
-                  <div className="pt-2">
-                    <Notice tone="warning">{status.error}</Notice>
-                  </div>
-                ) : null}
-              </SectionCard>
 
-              {/* 2. 推荐的下一步 */}
-              <Notice
-                tone={nextStep.tone === 'accent' ? 'info' : nextStep.tone}
-                title={nextStep.title}
-                actions={
-                  nextStep.action === 'sync' ? (
-                    <Button size="sm" onClick={() => void run({ push: true })} disabled={running}>
-                      立即同步
-                    </Button>
-                  ) : nextStep.action === 'saveRemote' ? (
-                    <Button size="sm" onClick={() => void run({ push: false, setRemote: remoteInput })} disabled={!remoteInput.trim()}>
-                      保存远端并同步
-                    </Button>
-                  ) : nextStep.action === 'settings' ? (
-                    <Button size="sm" onClick={() => setPage('settings')}>
-                      去设置
-                    </Button>
-                  ) : null
-                }
-              >
-                {nextStep.body}
-              </Notice>
-
-              {/* 3. 待同步摘要 + 隐私提醒 */}
-              <SectionCard title="待同步内容" description="点击「立即同步」后会发生的事">
-                <div className="grid gap-x-6 sm:grid-cols-4">
-                  <Field label="待同步会话">
-                    <span className="tabular-nums">{pending} 个</span>
+                {/* 规模：会不会有数据离开本机、有多少 */}
+                <div className="grid gap-x-6 border-t border-line-subtle pt-2 sm:grid-cols-4">
+                  <Field label={t('sync.pendingSessions')}>
+                    <span className="tabular-nums">{t('sync.countUnit', { n: pending })}</span>
                   </Field>
-                  <Field label="预计写入">
-                    <span className="tabular-nums">约 {formatBytes(status?.pendingBytes ?? 0)}</span>
+                  <Field label={t('sync.pendingBytes')}>
+                    <span className="tabular-nums">
+                      {t('sync.approx', { bytes: formatBytes(status?.pendingBytes ?? 0) })}
+                    </span>
                   </Field>
-                  <Field label="本地未提交">
-                    <span className="tabular-nums">{changes} 个文件</span>
+                  <Field label={t('sync.localChanges')}>
+                    <span className="tabular-nums">{t('sync.filesCount', { n: changes })}</span>
                   </Field>
-                  <Field label="本地领先">
-                    <span className="tabular-nums">{status?.ahead ?? 0} 个提交</span>
+                  <Field label={t('sync.ahead')}>
+                    <span className="tabular-nums">{t('sync.commitsCount', { n: ahead })}</span>
                   </Field>
                 </div>
+
                 {!remoteConfigured ? (
                   <div className="pt-2">
                     <FormlessRemoteInput
@@ -374,49 +327,57 @@ export function SyncPage() {
                     />
                   </div>
                 ) : null}
-                <div className="pt-2">
-                  <Notice tone="warning" title="提醒：同步内容会离开本机">
-                    AI 会话可能包含源代码、命令输出、内网地址与密钥，请使用 Private Repository；
-                    客户端不会读取或提交 credentials 类目录。
-                  </Notice>
-                </div>
-              </SectionCard>
 
-              {/* 4. 上一次同步结果 */}
+                {/* 隐私：只在真的有内容会离开本机时出现 */}
+                {willSendData ? (
+                  <div className="pt-3">
+                    <Notice tone="warning" title={t('sync.privacyTitle')}>
+                      {t('sync.privacyBody')}
+                    </Notice>
+                  </div>
+                ) : null}
+
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-4">
+                  <p className="min-w-0 flex-1 text-body text-ink-muted">{nextStepText}</p>
+                  {/* 唯一主操作；clean 状态下 primary 为 null，这里显示弱化的状态文字 */}
+                  {primaryButton ?? (
+                    <span className="shrink-0 text-meta text-success">{t('sync.cleanState')}</span>
+                  )}
+                </div>
+              </section>
+
+              {/* 上一次同步结果 */}
               {report ? (
-                <SectionCard title="上一次同步结果" description={`耗时 ${report.durationMs} ms`}>
+                <Section title={t('sync.reportTitle')} description={t('sync.reportDuration', { ms: report.durationMs })}>
                   {report.steps.map((step) => (
                     <ListRow
                       key={step.name}
                       leading={
                         <StatusPill size="sm" tone={step.ok ? 'success' : 'danger'}>
-                          {step.ok ? '完成' : '失败'}
+                          {step.ok ? t('sync.stepOk') : t('sync.stepFailed')}
                         </StatusPill>
                       }
                       title={step.name}
                       subtitle={step.detail}
                       trailing={
                         <span className="text-meta tabular-nums text-ink-muted">
-                          {step.durationMs} ms
+                          {formatDuration(step.durationMs)}
                         </span>
                       }
                     />
                   ))}
                   {report.snapshot.written > 0 ? (
-                    <div className="pt-2">
-                      <div className="text-meta text-ink-muted">
-                        本次写入 {report.snapshot.written} 个会话目录，共{' '}
-                        {formatBytes(report.snapshot.bytes)}
+                    <div>
+                      <div className="text-meta tabular-nums text-ink-muted">
+                        {t('sync.snapshotSummary', {
+                          n: report.snapshot.written,
+                          bytes: formatBytes(report.snapshot.bytes),
+                        })}
                       </div>
-                      <ul className="max-h-40 overflow-y-auto pt-1">
+                      <ul className="max-h-40 overflow-y-auto overscroll-contain pt-1">
                         {report.snapshot.files.slice(0, 20).map((file) => (
-                          <li
-                            key={file.relPath}
-                            className="flex items-baseline justify-between gap-3"
-                          >
-                            <span className="truncate text-tech text-ink-muted">
-                              {file.relPath}
-                            </span>
+                          <li key={file.relPath} className="flex items-baseline justify-between gap-3">
+                            <span className="truncate text-tech text-ink-muted">{file.relPath}</span>
                             <span className="shrink-0 text-meta tabular-nums text-ink-muted">
                               {formatBytes(file.bytes)}
                             </span>
@@ -424,19 +385,19 @@ export function SyncPage() {
                         ))}
                         {report.snapshot.files.length > 20 ? (
                           <li className="text-meta text-ink-muted">
-                            … 共 {report.snapshot.files.length} 个会话目录
+                            {t('sync.snapshotTotal', { n: report.snapshot.files.length })}
                           </li>
                         ) : null}
                       </ul>
                     </div>
                   ) : null}
-                </SectionCard>
+                </Section>
               ) : null}
 
-              {/* 5. 高级诊断（默认收起） */}
-              <SectionCard
-                title="归档与高级诊断"
-                description="归档历史会话、查看未提交文件、Git 日志与数据源"
+              {/* 归档与高级诊断（默认收起） */}
+              <Section
+                title={t('sync.advancedTitle')}
+                description={t('sync.advancedDesc')}
                 actions={
                   <Button
                     tone="ghost"
@@ -444,27 +405,33 @@ export function SyncPage() {
                     aria-expanded={advancedOpen}
                     onClick={() => setAdvancedOpen((value) => !value)}
                   >
-                    {advancedOpen ? '收起' : '展开'}
+                    {advancedOpen ? t('sync.collapse') : t('sync.expand')}
                   </Button>
                 }
               >
                 {advancedOpen ? (
-                  <div className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-4">
                     <div>
                       <div className="flex items-center justify-between pb-1">
-                        <span className="text-body text-ink">归档（{archives.length}）</span>
+                        <span className="text-body text-ink">
+                          {t('sync.archives', { n: archives.length })}
+                        </span>
                         <Button tone="ghost" size="sm" onClick={() => void archiveOld()}>
-                          归档长期未更新的会话
+                          {t('sync.archiveOld')}
                         </Button>
                       </div>
                       {archives.length === 0 ? (
-                        <div className="text-meta text-ink-muted">还没有归档。</div>
+                        <div className="text-meta text-ink-muted">{t('sync.noArchives')}</div>
                       ) : (
-                        <div className="max-h-48 overflow-y-auto">
+                        <div className="max-h-48 overflow-y-auto overscroll-contain">
                           {archives.map((entry) => (
                             <ListRow
                               key={entry.relPath}
-                              leading={<StatusPill size="sm" tone="neutral">{entry.compression}</StatusPill>}
+                              leading={
+                                <StatusPill size="sm" tone="neutral">
+                                  {entry.compression}
+                                </StatusPill>
+                              }
                               title={entry.title ?? entry.sessionId}
                               trailing={
                                 <>
@@ -472,7 +439,7 @@ export function SyncPage() {
                                     {formatBytes(entry.sizeBytes)} · {formatRelative(entry.createdAt)}
                                   </span>
                                   <Button tone="ghost" size="sm" onClick={() => void restore(entry.relPath)}>
-                                    恢复
+                                    {t('sync.restore')}
                                   </Button>
                                 </>
                               }
@@ -485,9 +452,9 @@ export function SyncPage() {
                     {status && status.changes.length > 0 ? (
                       <div>
                         <div className="pb-1 text-body text-ink">
-                          未提交文件（{status.changes.length}）
+                          {t('sync.uncommitted', { n: status.changes.length })}
                         </div>
-                        <div className="max-h-40 overflow-y-auto text-tech text-ink-muted">
+                        <div className="max-h-40 overflow-y-auto overscroll-contain text-tech text-ink-muted">
                           {status.changes.map((change) => (
                             <div key={change.path} className="flex gap-2 py-0.5">
                               <span className="w-8 shrink-0 text-ink-faint">
@@ -503,29 +470,29 @@ export function SyncPage() {
 
                     <div>
                       <div className="flex items-center justify-between pb-1">
-                        <span className="text-body text-ink">Git 日志</span>
+                        <span className="text-body text-ink">{t('sync.gitLog')}</span>
                         <Button
                           tone="ghost"
                           size="sm"
                           onClick={() => void ipc.gitLog(30).then(setLog)}
                           disabled={!status?.isRepo}
                         >
-                          读取最近提交
+                          {t('sync.readLog')}
                         </Button>
                       </div>
                       {log !== null ? (
-                        <pre className="max-h-48 overflow-y-auto text-tech leading-5 text-ink-muted whitespace-pre-wrap [overflow-wrap:anywhere]">
-                          {log || '（空仓库）'}
+                        <pre className="max-h-48 overflow-y-auto overscroll-contain text-tech leading-5 text-ink-muted whitespace-pre-wrap [overflow-wrap:anywhere]">
+                          {log || t('sync.emptyRepo')}
                         </pre>
                       ) : (
-                        <div className="text-meta text-ink-muted">点击右侧按钮读取。</div>
+                        <div className="text-meta text-ink-muted">{t('sync.clickToRead')}</div>
                       )}
                     </div>
 
                     <div>
-                      <div className="pb-1 text-body text-ink">数据源</div>
+                      <div className="pb-1 text-body text-ink">{t('sync.sourcesTitle')}</div>
                       {sources.length === 0 ? (
-                        <div className="text-meta text-ink-muted">尚未探测。</div>
+                        <div className="text-meta text-ink-muted">{t('sync.notDetected')}</div>
                       ) : (
                         sources.map((source) => (
                           <Field
@@ -536,10 +503,10 @@ export function SyncPage() {
                           >
                             <span className="flex items-center gap-2">
                               <span className="min-w-0 flex-1 truncate">
-                                {source.rootPath ?? '未找到'}
+                                {source.rootPath ?? t('sync.notFound')}
                               </span>
                               <StatusPill tone={source.found ? 'success' : 'warning'}>
-                                {source.found ? '可用' : '未找到'}
+                                {source.found ? t('sync.available') : t('sync.notFound')}
                               </StatusPill>
                             </span>
                           </Field>
@@ -548,7 +515,7 @@ export function SyncPage() {
                     </div>
                   </div>
                 ) : null}
-              </SectionCard>
+              </Section>
             </>
           )}
 
@@ -557,7 +524,7 @@ export function SyncPage() {
               {progress}
             </div>
           ) : null}
-          {running ? <Spinner label="同步进行中…" /> : null}
+          {running ? <Spinner label={t('sync.running')} /> : null}
         </div>
       </div>
     </div>
@@ -576,18 +543,19 @@ function FormlessRemoteInput({
   onSubmit: () => void
   disabled: boolean
 }) {
+  const t = useT()
   return (
     <div className="flex items-center gap-2">
       <TextInput
         value={value}
         onChange={(event) => onChange(event.target.value)}
         onEnter={onSubmit}
-        aria-label="远端仓库地址"
-        placeholder="https://github.com/you/aichat-history.git（也支持 git@，保存后直接同步）"
+        aria-label={t('sync.remoteAria')}
+        placeholder={t('sync.remotePlaceholder')}
         className="font-mono text-meta"
       />
       <Button onClick={onSubmit} disabled={disabled}>
-        保存远端
+        {t('sync.saveRemote')}
       </Button>
     </div>
   )

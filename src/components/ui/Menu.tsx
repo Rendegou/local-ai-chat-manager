@@ -6,6 +6,7 @@
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 
+import { t, useT } from '../../lib/i18n'
 import { IconButton } from './Button'
 import { Icon } from './Icon'
 
@@ -26,7 +27,7 @@ export interface MenuItem {
  * `label` 必填：触发按钮是图标按钮，需要无障碍名称。
  */
 export function Menu({
-  label = '更多操作',
+  label = t('menu.more'),
   items,
   glyph,
 }: {
@@ -75,7 +76,7 @@ export function Menu({
         <div
           role="menu"
           aria-label={label}
-          className="absolute right-0 top-[calc(100%+6px)] z-30 min-w-[200px] animate-pop rounded-overlay border border-line bg-overlay p-1 shadow-overlay"
+          className="absolute right-0 top-[calc(100%+6px)] z-30 min-w-[200px] animate-pop rounded-panel border border-line bg-overlay p-1 shadow-overlay"
         >
           {items.map((item, index) => (
             <div key={item.label}>
@@ -92,7 +93,7 @@ export function Menu({
                   setOpen(false)
                   item.onClick()
                 }}
-                className={`flex w-full items-center gap-3 rounded-control px-2.5 py-1.5 text-left text-body transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
+                className={`flex w-full items-center gap-3 rounded-control px-2.5 py-1.5 text-left text-ui transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
                   item.tone === 'danger'
                     ? 'text-danger hover:bg-danger/12'
                     : 'text-ink hover:bg-hover'
@@ -119,9 +120,10 @@ export function SegmentedNav({
   current: string
   onSelect: (key: string) => void
 }) {
+  const t = useT()
   return (
     <nav
-      aria-label="主导航"
+      aria-label={t('nav.main')}
       className="nav-track flex items-center gap-1"
     >
       {items.map((item) => {

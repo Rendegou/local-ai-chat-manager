@@ -1,9 +1,12 @@
 /**
- * 按钮原语（规格 §7）。
+ * 按钮原语（docs/DESIGN.md §7）。
  *
  * 约定：
  * - 四种语气：primary（主操作）、secondary（次要，默认）、ghost（工具动作）、danger（破坏性）；
  * - 覆盖 hover / active / focus-visible / disabled / loading 五种状态；
+ * - 尺寸：sm 28px / md 32px / lg 36px（lg 只给页面级 Primary 用）；
+ * - 所有语气都带 1px 边框（primary/ghost 用透明边框）——否则同一行里不同语气的按钮
+ *   会因为边框有无而错位 1px；
  * - hover 只改表面色，不移动布局；loading 时保持宽度不跳动；
  * - 不依赖颜色单独表达语义：danger 同时带图标位（由调用方传入）。
  */
@@ -14,8 +17,8 @@ import { Spinner } from './Status'
 /** 按钮语气。 */
 export type ButtonTone = 'primary' | 'secondary' | 'ghost' | 'danger'
 
-/** 按钮尺寸：sm 用于面板内，md 用于工具栏与表单。 */
-export type ButtonSize = 'sm' | 'md'
+/** 按钮尺寸：sm 面板内、md 工具栏与表单、lg 页面级主操作。 */
+export type ButtonSize = 'sm' | 'md' | 'lg'
 
 export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'className'> {
   tone?: ButtonTone
@@ -30,18 +33,19 @@ export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement
 
 /** 语气 → 类名。 */
 const TONE: Record<ButtonTone, string> = {
-  // 主按钮：accent 渐变 + 顶内高光 + 柔和投影（唯一允许「浮起」的按钮）
-  primary: 'btn-primary text-accent-ink hover:brightness-105 active:brightness-95',
-  // 次按钮：升一级表面 + inset ring + 轻投影（见 index.css .btn-secondary）
-  secondary: 'btn-secondary text-ink',
-  ghost: 'bg-transparent text-ink-muted hover:bg-hover hover:text-ink active:bg-selected',
+  // 主按钮：实心低饱和铜，无投影（每屏至多一个；见 index.css .btn-primary）
+  primary: 'btn-primary border border-transparent',
+  // 次按钮：透明底 + 真实 1px 边框（见 index.css .btn-secondary）
+  secondary: 'btn-secondary',
+  ghost: 'border border-transparent bg-transparent text-ink-muted hover:bg-hover hover:text-ink active:bg-selected',
   danger: 'btn-danger',
 }
 
-/** 尺寸 → 类名。 */
+/** 尺寸 → 类名（高度与文档一致：sm 28 / md 32 / lg 36）。 */
 const SIZE: Record<ButtonSize, string> = {
   sm: 'h-7 gap-1.5 px-2.5 text-meta',
   md: 'h-8 gap-2 px-3 text-body',
+  lg: 'h-9 gap-2 px-4 text-body',
 }
 
 /** 通用按钮。 */
@@ -61,7 +65,7 @@ export function Button({
       type={type}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-      className={`inline-flex shrink-0 items-center justify-center rounded-control font-medium transition-[color,background-color,box-shadow,filter] disabled:cursor-not-allowed disabled:opacity-45 ${TONE[tone]} ${SIZE[size]} ${className}`}
+      className={`inline-flex shrink-0 items-center justify-center rounded-control font-medium transition-[color,background-color,border-color,filter] disabled:cursor-not-allowed disabled:opacity-55 ${TONE[tone]} ${SIZE[size]} ${className}`}
       {...rest}
     >
       {loading ? <Spinner size="sm" /> : icon}
@@ -93,13 +97,13 @@ export function IconButton({
   type = 'button',
   ...rest
 }: IconButtonProps) {
-  const box = size === 'sm' ? 'h-7 w-7' : 'h-8 w-8'
+  const box = size === 'sm' ? 'h-7 w-7' : size === 'lg' ? 'h-9 w-9' : 'h-8 w-8'
   return (
     <button
       type={type}
       title={label}
       aria-label={label}
-      className={`inline-flex shrink-0 items-center justify-center rounded-control transition-[color,background-color,box-shadow,filter] disabled:cursor-not-allowed disabled:opacity-45 ${TONE[tone]} ${box} ${className}`}
+      className={`inline-flex shrink-0 items-center justify-center rounded-control transition-[color,background-color,border-color,filter] disabled:cursor-not-allowed disabled:opacity-55 ${TONE[tone]} ${box} ${className}`}
       {...rest}
     >
       {children}

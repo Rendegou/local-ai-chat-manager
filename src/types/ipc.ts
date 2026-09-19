@@ -149,6 +149,7 @@ export interface StorageStats {
 
 /** 设置（与 Rust `AppSettings` 对应）。 */
 export interface AppSettings {
+  sources: Record<string, { enabled: boolean; path: string | null }>
   codexPath: string | null
   kimiPath: string | null
   cursorPath: string | null
@@ -162,6 +163,7 @@ export interface AppSettings {
   autoScanOnStart: boolean
   watchEnabled: boolean
   theme: 'system' | 'light' | 'dark'
+  language: 'system' | 'zh' | 'en'
   scanBatchLimit: number
   showArchived: boolean
 }
@@ -275,3 +277,23 @@ export interface ArchiveReport {
   entries: string[]
   warnings: string[]
 }
+
+export interface SourceDefinition {
+  id: string
+  displayName: string
+  adapterVersion: number
+  access: 'native' | 'import' | 'pending'
+  platforms: string[]
+  description: string
+  status: 'available' | 'missing' | 'partial' | 'error'
+  enabled: boolean
+  notes: string | null
+}
+export interface ImportMessage { role: string; text: string; kind: string; timestamp: string | null; toolName: string | null; attachments: string[] }
+export interface ImportPreview {
+  token: string
+  failed: number
+  warnings: string[]
+  sessions: { source: string; externalId: string; title: string | null; messageCount: number; messages: ImportMessage[]; partial: boolean }[]
+}
+export interface ImportReport { success: number; duplicates: number; failed: number; partial: number; warnings: string[] }

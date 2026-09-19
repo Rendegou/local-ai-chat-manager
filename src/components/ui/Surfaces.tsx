@@ -1,17 +1,24 @@
 /**
- * 布局类原语：面板标题、语义分组卡片、表单字段、空状态（规格 §7）。
+ * 布局类原语：面板标题、语义分组卡片、表单字段、空状态、抽屉。
  *
- * 分组规则：卡片只用于「设置 / 同步」这类语义分组，不用来把普通内容都套成卡片。
+ * 分组规则（docs/DESIGN.md §7）：Card 只用于**真正独立的对象、危险状态、临时浮层**，
+ * 不用来把表单分组套成卡片——表单分组优先用「标题 + 间距 + divider」。
  */
 import { useId, type ReactNode } from 'react'
 
-import { IconButton } from './Button'
-import { Icon } from './Icon'
+import { useT } from '../../lib/i18n'
+import { Overlay, OverlayHeader } from './Overlay'
 
 /**
  * 面板标题栏：分层标题（主标题 + 元数据）+ 操作槽。
  *
- * `sticky` 用于内容可滚动的面板（如会话正文），滚动时标题栏保持可见。
+ * 三个槽位宽度**不互相竞争**：
+ * - `title` 最多占 60%，超出截断——保证长标题不会把 meta 挤没；
+ * - `meta` 吃剩余空间并截断——保证长路径不会把标题挤没；
+ * - `actions` 固定宽度。
+ *
+ * `headingLevel` 让每个页面有且只有一个 `h1`（此前硬编码 h2，
+ * 导致四个页面全都没有一级标题，文档大纲从 h2 开始）。
  */
 export function PanelHeader({
   title,
@@ -19,6 +26,8 @@ export function PanelHeader({
   actions,
   /** 标题下方的补充信息（例如当前筛选摘要） */
   description,
+  /** 语义标题层级：页面主标题传 1，面板/分区传 2（默认）或 3 */
+  headingLevel = 2,
   sticky = false,
   className = '',
 }: {
@@ -26,25 +35,24 @@ export function PanelHeader({
   meta?: ReactNode
   actions?: ReactNode
   description?: ReactNode
+  headingLevel?: 1 | 2 | 3
   sticky?: boolean
   className?: string
 }) {
+  const Heading = headingLevel === 1 ? 'h1' : headingLevel === 3 ? 'h3' : 'h2'
   return (
-    <div
-      className={`panel-header shrink-0 ${
-        sticky ? 'sticky top-0 z-10' : ''
-      } ${className}`}
-    >
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 flex-1 items-baseline gap-2.5">
-          {/* truncate 必须配 min-w-0 + flex-1：否则 nowrap 文本的固有宽度会撑宽整个头部
-              （仅在文字放到 200% 时才暴露出来） */}
-          <h2 className="min-w-0 flex-1 truncate font-display text-title text-ink">{title}</h2>
-          {meta ? (
-            <div className="min-w-0 flex-1 truncate text-meta text-ink-muted">{meta}</div>
-          ) : null}
-        </div>
-        {actions ? <div className="flex shrink-0 items-center gap-1.5">{actions}</div> : null}
+    <div className={`panel-header shrink-0 ${sticky ? 'sticky top-0 z-10' : ''} ${className}`}>
+      <div className="flex min-w-0 items-center gap-3">
+        {/* truncate 必须配 min-w-0：否则 nowrap 文本的固有宽度会撑宽整个头部 */}
+        <Heading className="min-w-0 max-w-[60%] shrink truncate text-title text-ink">
+          {title}
+        </Heading>
+        {meta ? (
+          <div className="min-w-0 flex-1 truncate text-meta text-ink-muted">{meta}</div>
+        ) : null}
+        {actions ? (
+          <div className="ml-auto flex shrink-0 items-center gap-1.5">{actions}</div>
+        ) : null}
       </div>
       {description ? <div className="pt-1 text-meta text-ink-muted">{description}</div> : null}
     </div>
@@ -52,9 +60,10 @@ export function PanelHeader({
 }
 
 /**
- * 语义分组卡片：仅用于设置页与同步页的功能分组。
+ * 语义分组卡片。
  *
- * `tone` 用于危险分组（Danger Zone），带边框强调但不靠颜色单独表意（标题里写清后果）。
+ * **不是设置/同步页的默认容器**——绝大多数分组应该用 `Section`（标题 + 间距 + divider）。
+ * 保留给真正独立的对象与危险状态。
  */
 export function SectionCard({
   title,
@@ -71,27 +80,62 @@ export function SectionCard({
   children: ReactNode
   className?: string
 }) {
-  // 默认卡：档案页材质 + 轻投影；danger 卡保留语义 inset ring + 淡染
-  const skin =
-    tone === 'danger'
-      ? 'bg-danger/6 shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--semantic-danger)_35%,transparent)]'
-      : 'section-card'
   return (
-    <section className={`rounded-panel ${skin} ${className}`}>
-      <header className="flex items-start justify-between gap-3 px-5 pb-1.5 pt-4">
+    <section
+      className={`rounded-panel ${
+        tone === 'danger'
+          ? 'border border-danger/35 bg-danger/6'
+          : 'section-card'
+      } ${className}`}
+    >
+      <header className="flex items-start justify-between gap-3 px-4 pb-1.5 pt-3">
         <div className="min-w-0">
-          <h3
-            className={`font-display text-lead ${tone === 'danger' ? 'text-danger' : 'text-ink'}`}
-          >
+          <h3 className={`text-section ${tone === 'danger' ? 'text-danger' : 'text-ink'}`}>
             {title}
           </h3>
+          {description ? <p className="pt-0.5 text-meta text-ink-muted">{description}</p> : null}
+        </div>
+        {actions ? <div className="flex shrink-0 items-center gap-1.5">{actions}</div> : null}
+      </header>
+      <div className="px-4 pb-3.5 pt-2">{children}</div>
+    </section>
+  )
+}
+
+/**
+ * 无卡片的设置分组：标题 + 说明 + 间距 + divider。
+ *
+ * 这是设置页与同步页的**默认容器**。它没有背景、没有圆角、没有边框，
+ * 只靠排版与一条分隔线表明「这几项属于一组」。
+ */
+export function Section({
+  title,
+  description,
+  actions,
+  headingLevel = 2,
+  children,
+  className = '',
+}: {
+  title: ReactNode
+  description?: ReactNode
+  actions?: ReactNode
+  headingLevel?: 2 | 3
+  children: ReactNode
+  className?: string
+}) {
+  const Heading = headingLevel === 3 ? 'h3' : 'h2'
+  return (
+    <section className={`border-b border-line pb-6 last:border-b-0 last:pb-0 ${className}`}>
+      <header className="flex items-start justify-between gap-3 pb-2">
+        <div className="min-w-0">
+          <Heading className="text-section text-ink">{title}</Heading>
           {description ? (
             <p className="pt-0.5 text-meta text-ink-muted">{description}</p>
           ) : null}
         </div>
         {actions ? <div className="flex shrink-0 items-center gap-1.5">{actions}</div> : null}
       </header>
-      <div className="px-5 pb-4 pt-2.5">{children}</div>
+      <div className="flex flex-col gap-3">{children}</div>
     </section>
   )
 }
@@ -107,7 +151,6 @@ export function FormField({
   label,
   hint,
   error,
-  /** 右侧附加信息（例如“未保存”） */
   badge,
   children,
 }: {
@@ -123,7 +166,7 @@ export function FormField({
   const describedBy = [hintId, errorId].filter(Boolean).join(' ') || undefined
 
   return (
-    <div className="py-2">
+    <div>
       <div className="flex items-baseline justify-between gap-2 pb-1">
         <label htmlFor={id} className="text-body font-medium text-ink">
           {label}
@@ -164,7 +207,7 @@ export function Field({
   hint?: ReactNode
 }) {
   return (
-    <div className="flex items-start gap-3 py-2">
+    <div className="flex items-start gap-3 py-1">
       <div className="w-28 shrink-0 pt-0.5 text-meta text-ink-muted">{label}</div>
       <div className={`min-w-0 flex-1 text-body text-ink ${mono ? 'break-all font-mono text-meta' : ''}`}>
         {children}
@@ -198,7 +241,7 @@ export function EmptyState({
       className={`flex h-full flex-col items-center justify-center gap-2.5 px-8 text-center ${className}`}
     >
       {icon ? <div className="pb-1 text-ink-faint">{icon}</div> : null}
-      <div className="text-lead text-ink">{title}</div>
+      <div className="text-section text-ink">{title}</div>
       {description ? (
         <div className="max-w-md text-body leading-6 text-ink-muted">{description}</div>
       ) : null}
@@ -213,41 +256,44 @@ export function EmptyState({
 }
 
 /**
- * 抽屉：窄窗口下来源/筛选面板的承载（规格 §5.2）。
+ * 抽屉：窄窗口下会话上下文 / 全局导航 / 来源管理的承载。
  *
- * 结构 = 遮罩（点击关闭）+ 面板（标题 + 关闭按钮 + 内容槽）；
- * 浮层用 overlay 表面 + 阴影 + animate-pop 入场。
+ * 键盘与 AT 契约全部来自 `Overlay`（焦点圈定、Escape、焦点归还、背景 inert、portal）。
+ * 从上方 46px 标题栏之下展开，标题栏保持可用——用户仍能拖动窗口、点窗口控制。
  */
 export function Drawer({
   title,
+  subtitle,
   onClose,
-  widthClass = 'w-[240px]',
+  widthClass = 'w-[280px]',
   children,
 }: {
   title: string
+  subtitle?: string
   onClose: () => void
   widthClass?: string
   children: ReactNode
 }) {
+  const t = useT()
+  const titleId = `drawer-${useId()}`
+  const belowHeader = 'absolute inset-x-0 bottom-0 top-[var(--app-header-h)]'
   return (
-    <>
-      <button
-        type="button"
-        aria-label={`关闭${title}`}
-        onClick={onClose}
-        className="absolute inset-0 z-20 bg-canvas/60"
+    <Overlay
+      open
+      onClose={onClose}
+      labelledBy={titleId}
+      backdropClassName={`${belowHeader} bg-canvas/60`}
+      positionClassName={`pointer-events-none ${belowHeader} flex items-stretch justify-start`}
+      panelClassName={`${widthClass} max-w-[86vw] rounded-none border-y-0 border-l-0`}
+    >
+      <OverlayHeader
+        id={titleId}
+        title={title}
+        subtitle={subtitle}
+        onClose={onClose}
+        closeLabel={t('common.closeTitle', { title })}
       />
-      <aside
-        className={`relative z-30 flex ${widthClass} shrink-0 animate-pop flex-col overflow-hidden border-r border-line bg-panel shadow-overlay`}
-      >
-        <div className="flex items-center justify-between border-b border-line px-3 py-2">
-          <span className="text-lead text-ink">{title}</span>
-          <IconButton label={`关闭${title}`} size="sm" onClick={onClose}>
-            <Icon name="close" />
-          </IconButton>
-        </div>
-        <div className="flex min-h-0 flex-1 flex-col">{children}</div>
-      </aside>
-    </>
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">{children}</div>
+    </Overlay>
   )
 }

@@ -24,7 +24,7 @@ import {
   SectionCard,
   SegmentedNav,
   Select,
-  SidebarRow,
+  PaneRow,
   SectionLabel,
   Skeleton,
   Spinner,
@@ -56,7 +56,7 @@ function Section({
   return (
     <section id={id} className="border-b border-line">
       <div className="border-b border-line/60 bg-panel px-6 py-3">
-        <h2 className="text-lead text-ink">{title}</h2>
+        <h2 className="text-section text-ink">{title}</h2>
         {hint ? <p className="pt-0.5 text-meta text-ink-muted">{hint}</p> : null}
       </div>
       <div className={`px-6 py-5 ${surface}`}>{children}</div>
@@ -110,7 +110,7 @@ function demoMessage(partial: Partial<MessageRow>): MessageRow {
 
 const DEMO_MESSAGES: Array<{ label: string; message: MessageRow }> = [
   {
-    label: 'user · 染色实体卡',
+    label: 'user · 中性淡底卡',
     message: demoMessage({
       sequence: 0,
       role: 'user',
@@ -133,7 +133,7 @@ const DEMO_MESSAGES: Array<{ label: string; message: MessageRow }> = [
     }),
   },
   {
-    label: 'tool_call · 终端块',
+    label: 'tool_call · 工具卡片',
     message: demoMessage({
       sequence: 3,
       kind: 'tool_call',
@@ -142,7 +142,7 @@ const DEMO_MESSAGES: Array<{ label: string; message: MessageRow }> = [
     }),
   },
   {
-    label: 'tool_result · 终端块',
+    label: 'tool_result · 工具卡片',
     message: demoMessage({
       sequence: 4,
       role: 'tool',
@@ -179,6 +179,8 @@ const ICONS: IconName[] = [
   'archive',
   'branch',
   'terminal',
+  'chat',
+  'menu',
 ]
 
 const TONES: Tone[] = ['neutral', 'accent', 'success', 'warning', 'danger', 'info', 'codex', 'kimi']
@@ -209,17 +211,17 @@ export function Gallery() {
       {/* 1. 排版 */}
       <Section id="type" title="排版" hint="字重 × 字号 × 字距的层级，CJK 与拉丁混排">
         <div className="flex max-w-3xl flex-col gap-3">
-          <div className="text-title text-ink">页面标题 Title 16/620 — Redis 续期排查</div>
-          <div className="text-lead text-ink">面板标题 Lead 14/560 — 会话列表</div>
+          <div className="text-title text-ink">页面标题 Title 16/600 — Redis 续期排查</div>
+          <div className="text-section text-ink">分组标题 Section 14/600 — 会话列表</div>
           <div className="text-body text-ink">
-            正文 Body 13.5/400 — 从日志看每次失败前都有一次 Connection reset by peer。
+            正文 Body 14/400 — 从日志看每次失败前都有一次 Connection reset by peer。
           </div>
-          <div className="text-body font-medium text-ink">控件强调 Body 13.5/500 — 立即同步</div>
+          <div className="text-body font-medium text-ink">控件强调 Body 14/500 — 立即同步</div>
           <div className="text-meta text-ink-muted">
             元数据 Meta 12/400 — /home/dev/projects/redis-go · 8 条 · 今天 06:38
           </div>
           <div className="text-tech text-ink-muted">
-            技术标识 Tech 11 mono — #0001 · 2026-09-16 06:35:25 · 0123456789
+            技术标识 Tech 11.5 mono — #0001 · 2026-09-16 06:35:25 · 0123456789
           </div>
         </div>
       </Section>
@@ -372,15 +374,15 @@ export function Gallery() {
         <div className="flex gap-6">
           <div className="w-56 shrink-0">
             <SectionLabel>数据源</SectionLabel>
-            <SidebarRow label="全部会话" count={54} active={false} onClick={() => {}} />
-            <SidebarRow
+            <PaneRow label="全部会话" count={54} active={false} onClick={() => {}} />
+            <PaneRow
               label="Codex"
               count={28}
               active
               onClick={() => {}}
               icon={<Dot tone="codex" />}
             />
-            <SidebarRow
+            <PaneRow
               label="Kimi Code"
               count={26}
               active={false}
@@ -388,43 +390,53 @@ export function Gallery() {
               icon={<Dot tone="kimi" />}
             />
             <SectionLabel trailing={6}>项目</SectionLabel>
-            <SidebarRow label="web-dashboard" count={14} active={false} onClick={() => {}} />
-            <SidebarRow label="redis-go" count={14} active={false} onClick={() => {}} />
+            <PaneRow label="web-dashboard" count={14} active={false} onClick={() => {}} />
+            <PaneRow label="redis-go" count={14} active={false} onClick={() => {}} />
           </div>
           <div className="w-96 shrink-0">
-            <div className="flex h-[30px] items-center px-4.5 text-meta font-medium text-ink-faint">
+            <div className="flex h-[30px] items-center px-4 text-micro font-medium uppercase tracking-[0.08em] text-ink-faint">
               今天
             </div>
-            <div className="px-1.5">
-              <SessionRow session={DEMO_SESSION} active={false} onClick={() => {}} />
-              <SessionRow session={DEMO_SESSION} active onClick={() => {}} />
-              <SessionRow
-                session={{ ...DEMO_SESSION, id: 'a', partial: true, source: 'codex', title: '实现 RESP3 协议解析器' }}
-                active={false}
-                onClick={() => {}}
-              />
-              <SessionRow
-                session={{ ...DEMO_SESSION, id: 'b', archived: true, syncStatus: 'archived', title: '文章详情页 SEO 元信息' }}
-                active={false}
-                onClick={() => {}}
-              />
-              <SessionRow
-                session={{
-                  ...DEMO_SESSION,
-                  id: 'c',
-                  syncStatus: 'modified',
-                  title: '把「会话发现 → 增量索引 → 全文搜索 → 多机同步」串成一条链路，标题非常非常非常长',
-                }}
-                active={false}
-                onClick={() => {}}
-              />
+            <div>
+              <div className="h-[68px]">
+                <SessionRow session={DEMO_SESSION} active={false} onClick={() => {}} />
+              </div>
+              <div className="h-[68px]">
+                <SessionRow session={DEMO_SESSION} active onClick={() => {}} />
+              </div>
+              <div className="h-[68px]">
+                <SessionRow
+                  session={{ ...DEMO_SESSION, id: 'a', partial: true, source: 'codex', title: '实现 RESP3 协议解析器' }}
+                  active={false}
+                  onClick={() => {}}
+                />
+              </div>
+              <div className="h-[68px]">
+                <SessionRow
+                  session={{ ...DEMO_SESSION, id: 'b', archived: true, syncStatus: 'archived', title: '文章详情页 SEO 元信息' }}
+                  active={false}
+                  onClick={() => {}}
+                />
+              </div>
+              <div className="h-[68px]">
+                <SessionRow
+                  session={{
+                    ...DEMO_SESSION,
+                    id: 'c',
+                    syncStatus: 'modified',
+                    title: '把「会话发现 → 增量索引 → 全文搜索 → 多机同步」串成一条链路，标题非常非常非常长',
+                  }}
+                  active={false}
+                  onClick={() => {}}
+                />
+              </div>
             </div>
           </div>
         </div>
       </Section>
 
       {/* 7. 消息物件 */}
-      <Section id="messages" title="消息物件" hint="用户 / 助手 / 推理 / 工具 / 事件" surface="bg-reading-glow">
+      <Section id="messages" title="消息物件" hint="用户 / 助手 / 推理 / 工具 / 事件" surface="bg-reading">
         <div className="mx-auto max-w-2xl">
           {DEMO_MESSAGES.map(({ label, message }) => (
             <div key={label}>

@@ -6,6 +6,7 @@
 //! - 错误统一转换为 [`crate::error::CommandError`]。
 
 pub mod archive;
+pub mod imports;
 pub mod search;
 pub mod sessions;
 pub mod settings;

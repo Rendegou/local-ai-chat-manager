@@ -17,14 +17,139 @@
  *   python tools/export_ui_mock.py .ui-shots/demo-index .ui-shots/mock/data.json
  */
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { resolve } from 'node:path'
 import puppeteer from 'puppeteer-core'
 
 const EDGE = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'
+const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe'
+
+/**
+ * 候选浏览器。
+ *
+ * 曾经只用 Edge，但在这台机器的受限沙箱下 Edge 子进程会以 `Code: 0` 静默退出
+ * （stderr 为空，无法从报错看出原因）；Chrome 用同样的参数可以正常启动。
+ * 所以改成按顺序探测：环境变量指定 → Edge → Chrome → puppeteer 自带的 Chrome。
+ */
+function browserCandidates() {
+  const list = []
+  if (process.env.AICHAT_BROWSER) list.push(process.env.AICHAT_BROWSER)
+  list.push(EDGE, CHROME)
+  for (const version of ['win64-142.0.7444.162', 'win64-131.0.6778.204']) {
+    list.push(resolve(homedir(), '.cache/puppeteer/chrome', version, 'chrome-win64/chrome.exe'))
+  }
+  return list.filter((path, index) => path && existsSync(path) && list.indexOf(path) === index)
+}
 const NAV_LABEL = { conversations: '会话', search: '搜索', sync: '同步', settings: '设置' }
 const EDGE_ARGS = ['--no-first-run', '--no-default-browser-check', '--disable-extensions', '--hide-scrollbars']
-// 某些受限 Windows 沙箱会以 0xC0000022 阻止 Edge 子进程启动；仅在显式请求时关闭浏览器沙箱。
+// 某些受限 Windows 沙箱会以 0xC0000022 阻止浏览器子进程启动；仅在显式请求时关闭浏览器沙箱。
 if (process.env.AICHAT_EDGE_NO_SANDBOX === '1') EDGE_ARGS.push('--no-sandbox')
+
+/**
+ * 依次尝试候选浏览器，返回第一个能真正启动的实例。
+ *
+ * 只检查文件存在是不够的——受限环境下 Edge 存在但每次启动都静默失败，
+ * 所以这里实际拉起一次并把失败信息打印出来，方便判断是不是环境问题。
+ */
+export async function launchBrowser() {
+  const candidates = browserCandidates()
+  if (candidates.length === 0) {
+    throw new Error('找不到可用的浏览器（Edge / Chrome / puppeteer 缓存都没有）')
+  }
+  const failures = []
+  for (const executablePath of candidates) {
+    try {
+      const browser = await puppeteer.launch({ executablePath, headless: true, args: EDGE_ARGS })
+      console.log(`浏览器：${executablePath}`)
+      return browser
+    } catch (error) {
+      failures.push(`  ${executablePath} → ${String(error).split('\n')[0]}`)
+    }
+  }
+  throw new Error(`所有候选浏览器都无法启动：\n${failures.join('\n')}`)
+}
+
+/**
+ * 数据源场景（截图与 QA 共用）。
+ *
+ * 真实的 `source_catalog` 固定返回 8 个来源，而本机通常只装了其中一两个。
+ * 这正是「能力 vs 本机实际」必须分开展示的原因，所以 mock 必须把六种情况都覆盖到：
+ *
+ * | 来源        | found | sessionHint | 配置    | status  | 期望出现在                    |
+ * | ----------- | ----- | ----------- | ------- | ------- | ----------------------------- |
+ * | codex       | 是    | 15          | 手工    | available | 侧栏 / 搜索 / 已连接         |
+ * | kimi        | 是    | 13          | 手工    | available | 侧栏 / 搜索 / 已连接         |
+ * | cursor      | 否    | 0           | 无      | missing | **只在「添加来源」**         |
+ * | claude      | 否    | 0           | 手工路径 | missing | 侧栏 / 已连接（不在搜索）    |
+ * | gemini      | 否    | 4           | 无      | missing | 侧栏 / 搜索 / 已连接         |
+ * | workbuddy   | 否    | 0           | 无      | error   | 已连接 + 顶部告警             |
+ * | doubao-work | 否    | 0           | 无      | missing | 只在「添加来源」（import）   |
+ * | legacy-export | 否  | 2           | 无      | ——      | 侧栏 / 搜索 / 已连接（不在 Catalog） |
+ */
+export const SOURCE_FIXTURES = {
+  rows: [
+    { id: 'codex', displayName: 'Codex', rootPath: 'D:/demo/codex-home', found: true, sessionHint: 15, manual: true, notes: '使用设置中手工指定的目录', detectedAt: '2026-09-19T02:00:00Z' },
+    { id: 'kimi', displayName: 'Kimi Code', rootPath: 'D:/demo/kimi-home', found: true, sessionHint: 13, manual: true, notes: '使用设置中手工指定的目录', detectedAt: '2026-09-19T02:00:00Z' },
+    { id: 'claude', displayName: 'Claude Code', rootPath: 'D:/demo/claude-projects', found: false, sessionHint: 0, manual: true, notes: '使用设置中手工指定的目录', detectedAt: '2026-09-19T02:00:00Z' },
+    { id: 'gemini', displayName: 'Gemini CLI', rootPath: null, found: false, sessionHint: 4, manual: false, notes: null, detectedAt: '2026-09-19T02:00:00Z' },
+    { id: 'workbuddy', displayName: 'WorkBuddy', rootPath: 'C:/Users/Demo/AppData/Roaming/WorkBuddy', found: false, sessionHint: 0, manual: false, notes: '状态数据库被占用，无法读取', detectedAt: '2026-09-19T02:00:00Z' },
+    { id: 'legacy-export', displayName: 'legacy-export', rootPath: null, found: false, sessionHint: 2, manual: false, notes: null, detectedAt: '2026-09-19T02:00:00Z' },
+  ],
+  catalog: [
+    { id: 'codex', displayName: 'Codex', adapterVersion: 1, access: 'native', platforms: ['windows'], description: 'Codex 数据目录，留空自动发现', status: 'available', enabled: true, notes: null },
+    { id: 'kimi', displayName: 'Kimi Code', adapterVersion: 1, access: 'native', platforms: ['windows'], description: 'Kimi Code 数据目录，留空自动发现', status: 'available', enabled: true, notes: null },
+    { id: 'cursor', displayName: 'Cursor', adapterVersion: 1, access: 'native', platforms: ['windows'], description: 'globalStorage 目录（state.vscdb）', status: 'missing', enabled: true, notes: null },
+    { id: 'zcode', displayName: 'ZCode', adapterVersion: 1, access: 'native', platforms: ['windows'], description: 'ZCode v2/sessions 目录', status: 'missing', enabled: true, notes: null },
+    { id: 'claude', displayName: 'Claude Code', adapterVersion: 1, access: 'native', platforms: ['windows'], description: '~/.claude/projects 项目历史目录', status: 'missing', enabled: true, notes: null },
+    { id: 'gemini', displayName: 'Gemini CLI', adapterVersion: 1, access: 'native', platforms: ['windows'], description: '~/.gemini/tmp 项目历史目录', status: 'missing', enabled: true, notes: null },
+    { id: 'workbuddy', displayName: 'WorkBuddy', adapterVersion: 1, access: 'native', platforms: ['windows'], description: 'WorkBuddy 应用数据目录；按检测结果显示正文支持程度', status: 'error', enabled: true, notes: '状态数据库被占用，无法读取' },
+    { id: 'doubao-work', displayName: '豆包工作', adapterVersion: 1, access: 'import', platforms: ['windows'], description: '仅支持标准格式手动导入；自动采集待适配', status: 'missing', enabled: true, notes: null },
+  ],
+  /** 与 catalog 对应的设置里来源配置：claude 有手工路径（「未安装但已配置」）。 */
+  settingsSources: {
+    codex: { enabled: true, path: 'D:/demo/codex-home' },
+    kimi: { enabled: true, path: 'D:/demo/kimi-home' },
+    claude: { enabled: true, path: 'D:/demo/claude-projects' },
+  },
+  /**
+   * 「本机未安装但有历史」与「Catalog 里没有的来源」各造一条真实会话，
+   * 否则侧栏与搜索里的这两个来源只是空数字，截图看不出它们真的能用。
+   */
+  extraSessions: [
+    {
+      id: 'gemini/demo-1', source: 'gemini', externalId: 'demo-1', title: 'Gemini: 归档脚本的幂等性',
+      projectPath: '/home/dev/work/archive-tools', createdAt: '2026-09-17T09:12:00Z', updatedAt: '2026-09-17T09:30:00Z',
+      machineId: 'demo-machine', messageCount: 4, partial: false, archived: false, syncStatus: 'synced',
+      primaryFile: '/demo/gemini/demo-1.json', contentHash: 'gemini1',
+    },
+    {
+      id: 'gemini/demo-2', source: 'gemini', externalId: 'demo-2', title: 'Gemini: 索引压缩策略对比',
+      projectPath: '/home/dev/work/archive-tools', createdAt: '2026-09-16T11:02:00Z', updatedAt: '2026-09-16T11:20:00Z',
+      machineId: 'demo-machine', messageCount: 3, partial: true, archived: false, syncStatus: 'synced',
+      primaryFile: '/demo/gemini/demo-2.json', contentHash: 'gemini2',
+    },
+    {
+      id: 'legacy-export/demo-1', source: 'legacy-export', externalId: 'legacy-1', title: '旧版导出的会话（来源已下线）',
+      projectPath: '/home/dev/legacy/imported', createdAt: '2026-08-30T08:00:00Z', updatedAt: '2026-08-30T08:15:00Z',
+      machineId: 'demo-machine', messageCount: 2, partial: false, archived: false, syncStatus: 'local',
+      primaryFile: '/demo/legacy-export/legacy-1.json', contentHash: 'legacy1',
+    },
+  ],
+  extraMessages: {
+    'gemini/demo-1': [
+      { id: 'gemini/demo-1#1', sessionId: 'gemini/demo-1', sequence: 1, role: 'user', kind: 'message', text: '归档脚本重复执行会覆盖已有文件，怎么做到幂等？', toolName: null, timestamp: '2026-09-17T09:12:00Z', raw: null },
+      { id: 'gemini/demo-1#2', sessionId: 'gemini/demo-1', sequence: 2, role: 'assistant', kind: 'message', text: '用内容哈希命名，写入前先查 hash 是否已存在；存在就跳过。', toolName: null, timestamp: '2026-09-17T09:13:00Z', raw: null },
+    ],
+    'gemini/demo-2': [
+      { id: 'gemini/demo-2#1', sessionId: 'gemini/demo-2', sequence: 1, role: 'user', kind: 'message', text: '索引压缩 watchdog 相关的策略怎么选？', toolName: null, timestamp: '2026-09-16T11:02:00Z', raw: null },
+      { id: 'gemini/demo-2#2', sessionId: 'gemini/demo-2', sequence: 2, role: 'assistant', kind: 'message', text: 'zstd 在日志类数据上比 gzip 更划算，解压更快。', toolName: null, timestamp: '2026-09-16T11:03:00Z', raw: null },
+    ],
+    'legacy-export/demo-1': [
+      { id: 'legacy-export/demo-1#1', sessionId: 'legacy-export/demo-1', sequence: 1, role: 'user', kind: 'message', text: '这是从旧版本导出的会话，来源已经不在产品目录里了。', toolName: null, timestamp: '2026-08-30T08:00:00Z', raw: null },
+      { id: 'legacy-export/demo-1#2', sessionId: 'legacy-export/demo-1', sequence: 2, role: 'assistant', kind: 'message', text: '历史仍然保留，也可以在侧栏与搜索里筛到这个来源。', toolName: null, timestamp: '2026-08-30T08:01:00Z', raw: null },
+    ],
+  },
+}
 
 /** 解析命令行参数。 */
 function parseArgs(argv) {
@@ -70,10 +195,18 @@ export const PAGE_MOCK = String.raw`
   const mock = __MOCK__;
   const stateName = __STATE__;
   const theme = __THEME__;
+  const fixtures = __SOURCES__;
   const sessions = mock.sessions;
+  // 追加「本机未安装但有历史」与「Catalog 之外的来源」的会话（引用同一个数组，后续读到的就是完整集合）
+  mock.sessions.push.apply(mock.sessions, fixtures.extraSessions);
   const messages = mock.messages;
+  for (const key of Object.keys(fixtures.extraMessages)) messages[key] = fixtures.extraMessages[key];
+  const sourceRows = fixtures.rows;
+  const sourceCatalog = fixtures.catalog;
   const windowState = { maximized: false, calls: [] };
   window.__UI_QA_WINDOW_STATE__ = windowState;
+  /** QA 用：记录每次 search 的请求序号，用来验证「旧响应不覆盖新响应」 */
+  window.__UI_QA_SEARCH__ = { calls: [] };
 
   /** 会话筛选（与后端 SessionFilter 语义一致）。 */
   const byFilter = (filter) => {
@@ -99,12 +232,16 @@ export const PAGE_MOCK = String.raw`
   };
 
   /** 关键词搜索：子串匹配 + 高亮，返回与 Rust 端同形的结构。 */
+  /** 只搜对话正文时排除工具输出与事件（与后端 messagesOnly 语义一致）。 */
+  const isBodyMessage = (message) => message.kind === 'message';
+
   const doSearch = (query) => {
     const terms = (query.text || '').split(/\s+/).filter(Boolean);
     const hits = [];
     if (terms.length) {
       for (const session of byFilter(query.filter)) {
         for (const message of messages[session.id] || []) {
+          if (query.messagesOnly && !isBodyMessage(message)) continue;
           const text = message.text || '';
           if (!terms.every((t) => text.toLowerCase().includes(t.toLowerCase()))) continue;
           const at = Math.max(0, text.toLowerCase().indexOf(terms[0].toLowerCase()) - 40);
@@ -131,12 +268,16 @@ export const PAGE_MOCK = String.raw`
   const emptyState = stateName === 'empty';
   const scanReport = {
     scanned: mock.stats.sessions, parsed: 0, skipped: mock.stats.sessions, removed: 0,
-    failed: 0, pending: 0, skippedDuplicates: 0, durationMs: 86, warnings: [], sources: mock.sources,
+    failed: 0, pending: 0, skippedDuplicates: 0, durationMs: 86, warnings: [], sources: sourceRows,
   };
 
   const table = {
-    detect_sources: () => mock.sources,
-    list_sources: () => mock.sources,
+    detect_sources: () => sourceRows,
+    list_sources: () => sourceRows,
+    // 数据源目录（来源注册表）：8 个产品支持的来源，本机只发现其中一部分
+    source_catalog: () => sourceCatalog,
+    // 事件订阅：返回一个 no-op 反注册函数（真实后端返回 UnlistenFn）
+    'plugin:event|listen': () => () => {},
     list_sessions: (a) => (emptyState ? [] : byFilter(a.filter))
       .slice(a.offset || 0, (a.offset || 0) + (a.limit || 200)),
     count_sessions: (a) => (emptyState ? 0 : byFilter(a.filter).length),
@@ -162,7 +303,25 @@ export const PAGE_MOCK = String.raw`
       ? { sessions: 0, messages: 0, archivedSessions: 0, projects: 0, bytesOnDisk: 0 } : mock.stats),
     scan_library: () => scanReport,
     rebuild_index: () => scanReport,
-    search: (a) => doSearch(a.query),
+    // 记录调用序号与条件，供 QA 断言「筛选变化后确实发出了新查询」
+    search: async (a) => {
+      const log = window.__UI_QA_SEARCH__;
+      const index = log.calls.length;
+      const entry = {
+        text: a.query.text,
+        source: (a.query.filter || {}).source || '',
+        order: a.query.order || 'relevance',
+        messagesOnly: Boolean(a.query.messagesOnly),
+        offset: a.query.offset || 0,
+      };
+      log.calls.push(entry);
+      // QA 用：按调用序号注入人工延迟，用来构造「旧响应晚于新响应返回」的竞态
+      const delay = (log.delays || {})[index] || 0;
+      if (delay) await new Promise((r) => setTimeout(r, delay));
+      const result = doSearch(a.query);
+      entry.hits = result.hits.length;
+      return result;
+    },
     sync_status: () => sync,
     sync_now: () => ({
       steps: [], branch: 'main', remote: sync.remote, committed: true, pushed: true, pulled: true,
@@ -175,7 +334,12 @@ export const PAGE_MOCK = String.raw`
     archive_old_sessions: () => ({ archived: 0, failed: 0, bytesIn: 0, bytesOut: 0, entries: [], warnings: [] }),
     list_archives: () => (emptyState ? [] : mock.archives),
     restore_archive: () => 'D:/AIChatRepo/kimi/ses_0aa1',
-    get_settings: () => Object.assign({}, mock.settings, { theme }),
+    get_settings: () => Object.assign({}, mock.settings, {
+      theme,
+      language: 'zh',
+      // 来源配置必须带上：claude 的「未安装但手工配置」只有从这里才能看出来
+      sources: fixtures.settingsSources,
+    }),
     save_settings: (a) => Object.assign({}, a.settings),
     data_dir: () => mock.dataDir,
     machine_id: () => mock.machineId,
@@ -210,6 +374,123 @@ export const PAGE_MOCK = String.raw`
 })();
 `
 
+
+/**
+ * 切换页面：优先直接点 Rail 上的导航项；Rail 不存在（<768px）时先开标题栏的导航抽屉。
+ */
+async function gotoPage(tab, label) {
+  const clicked = await tab.evaluate((name) => {
+    const button = [...document.querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === name,
+    )
+    if (button) {
+      button.click()
+      return true
+    }
+    return false
+  }, label)
+  if (clicked) return
+  await tab.evaluate(() => {
+    document.querySelector('button[aria-label="打开导航"]')?.click()
+  })
+  await new Promise((r) => setTimeout(r, 300))
+  await tab.evaluate((name) => {
+    const button = [...document.querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === name,
+    )
+    button?.click()
+  }, label)
+}
+
+/** 点一个文本完全匹配的按钮（设置页的分区操作、抽屉入口等）。 */
+async function clickByText(tab, label) {
+  return tab.evaluate((name) => {
+    const button = [...document.querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === name,
+    )
+    if (!button) return false
+    button.click()
+    return true
+  }, label)
+}
+
+const wait = (ms) => new Promise((r) => setTimeout(r, ms))
+
+/**
+ * 浮层类截图。
+ *
+ * 每个浮层有自己的合适视口与触发路径：
+ * - 导航抽屉只在 <768px 出现（≥768px Rail 常驻），所以用 640x720；
+ * - 来源抽屉需要 768–1279px 区间（此时「来源与项目」按钮才存在），用 1180x800；
+ * - 设置页的三个抽屉与 Quick Search 用它们最常见的窗口尺寸。
+ */
+const OVERLAY_SHOTS = [
+  {
+    page: 'nav-drawer',
+    size: '640x720',
+    setup: async (tab) => {
+      await tab.evaluate(() => {
+        document.querySelector('button[aria-label="打开导航"]')?.click()
+      })
+      await wait(400)
+    },
+  },
+  {
+    page: 'source-drawer',
+    size: '1180x800',
+    setup: async (tab) => {
+      await clickByText(tab, '来源与项目')
+      await wait(400)
+    },
+  },
+  {
+    page: 'add-source',
+    size: '1180x800',
+    setup: async (tab) => {
+      await gotoPage(tab, '设置')
+      await wait(400)
+      await clickByText(tab, '添加来源')
+      await wait(400)
+    },
+  },
+  {
+    page: 'configure-source',
+    size: '1180x800',
+    setup: async (tab) => {
+      await gotoPage(tab, '设置')
+      await wait(400)
+      await clickByText(tab, '配置')
+      await wait(400)
+    },
+  },
+  {
+    page: 'import-drawer',
+    size: '1180x800',
+    setup: async (tab) => {
+      await gotoPage(tab, '设置')
+      await wait(400)
+      await clickByText(tab, '导入会话')
+      await wait(400)
+    },
+  },
+  {
+    page: 'quicksearch',
+    size: '1440x900',
+    setup: async (tab) => {
+      await tab.evaluate(() => {
+        const button = [...document.querySelectorAll('button')].find((b) =>
+          (b.getAttribute('aria-label') ?? '').startsWith('快速搜索'),
+        )
+        button?.click()
+      })
+      // 等浮层挂载完成再输入：直接 type 会在面板还没渲染时抛「找不到选择器」，
+      // 一个瞬时竞态就会让整轮截图中断。
+      await tab.waitForSelector('[role="dialog"] input[role="combobox"]', { timeout: 5000 })
+      await tab.type('[role="dialog"] input[role="combobox"]', 'watchdog', { delay: 20 })
+      await wait(900)
+    },
+  },
+]
 
 /**
  * 对比度审计：遍历可见文本，取计算样式与「有效背景」，按 WCAG 算对比度。
@@ -321,6 +602,7 @@ export function injectionFor(mock, stateName, theme) {
     .replace('__MOCK__', JSON.stringify(mock))
     .replace('__STATE__', JSON.stringify(stateName))
     .replace('__THEME__', JSON.stringify(theme))
+    .replace('__SOURCES__', JSON.stringify(SOURCE_FIXTURES))
 }
 
 async function main() {
@@ -333,21 +615,14 @@ async function main() {
     )
     process.exit(1)
   }
-  if (!existsSync(EDGE)) {
-    console.error(`找不到 Edge：${EDGE}`)
-    process.exit(1)
-  }
   const mock = JSON.parse(readFileSync(mockPath, 'utf8'))
   mkdirSync(resolve(args.out), { recursive: true })
 
-  const browser = await puppeteer.launch({
-    executablePath: EDGE,
-    headless: true,
-    args: EDGE_ARGS,
-  })
+  const browser = await launchBrowser()
 
   const written = []
   const findings = []
+  const failed = []
   try {
     for (const state of args.states) {
       for (const size of args.sizes) {
@@ -363,18 +638,12 @@ async function main() {
             // 等首屏数据落地（会话列表或空状态都算就绪）
             await tab.waitForFunction(() => document.body.innerText.includes('会话'), { timeout: 20000 })
             if (page !== 'conversations') {
-              await tab.evaluate((label) => {
-                const button = [...document.querySelectorAll('button')]
-                  .find((b) => b.textContent?.trim() === label)
-                button?.click()
-              }, NAV_LABEL[page])
+              await gotoPage(tab, NAV_LABEL[page])
             }
             if (state === 'drawer') {
-              // 窄窗口：点开工具栏的「筛选」按钮，验证抽屉方案
+              // 窄窗口：点开标题栏的导航抽屉，验证全局导航的降级方案
               await tab.evaluate(() => {
-                const button = [...document.querySelectorAll('button')]
-                  .find((b) => (b.textContent ?? '').includes('筛选'))
-                button?.click()
+                document.querySelector('button[aria-label="打开导航"]')?.click()
               })
               await new Promise((r) => setTimeout(r, 400))
             }
@@ -425,11 +694,7 @@ async function main() {
                 toggle.click()
               })
               await new Promise((r) => setTimeout(r, 300))
-              await tab.evaluate(() => {
-                const nav = [...document.querySelectorAll('nav button')]
-                  .find((b) => b.textContent?.trim() === '会话')
-                nav?.click()
-              })
+              await gotoPage(tab, '会话')
               await new Promise((r) => setTimeout(r, 500))
             }
             if (state === 'focus') {
@@ -441,7 +706,8 @@ async function main() {
             }
             await new Promise((r) => setTimeout(r, 700))
             await tab.screenshot({ path: resolve(args.out, name) })
-            if (args.a11y && page === 'conversations' && size === args.sizes[0]) {
+            // 对比度审计：每个页面在最大视口各跑一次（含深浅两色）
+            if (args.a11y && size === args.sizes[0]) {
               const issues = await tab.evaluate(CONTRAST_AUDIT)
               for (const issue of issues) {
                 findings.push({ name, ...issue })
@@ -453,10 +719,42 @@ async function main() {
         }
       }
     }
+
+    // 浮层类截图：每个浮层有自己合适的视口与触发方式，不跟着主循环的尺寸矩阵跑
+    for (const shot of OVERLAY_SHOTS) {
+      for (const theme of args.themes) {
+        const [width, height] = shot.size.split('x').map(Number)
+        const name = `${shot.page}-${theme}.png`
+        const tab = await browser.newPage()
+        await tab.setViewport({ width, height, deviceScaleFactor: 2 })
+        await tab.evaluateOnNewDocument(injectionFor(mock, 'normal', theme))
+        await tab.goto(args.url, { waitUntil: 'networkidle2', timeout: 60000 })
+        await tab.waitForSelector('header', { timeout: 20000 })
+        await tab.waitForFunction(() => document.body.innerText.includes('会话'), { timeout: 20000 })
+        try {
+          await shot.setup(tab)
+        } catch (error) {
+          // 单个浮层没打开不该让整轮证据缺失：报告出来继续跑其余的
+          console.error(`  !! ${shot.page} 截图失败：${String(error).slice(0, 160)}`)
+          failed.push(`${shot.page}-${theme}`)
+          await tab.close()
+          continue
+        }
+        await new Promise((r) => setTimeout(r, 700))
+        await tab.screenshot({ path: resolve(args.out, name) })
+        if (args.a11y) {
+          const issues = await tab.evaluate(CONTRAST_AUDIT)
+          for (const issue of issues) findings.push({ name, ...issue })
+        }
+        await tab.close()
+        written.push(name)
+      }
+    }
   } finally {
     await browser.close()
   }
   console.log(`已生成 ${written.length} 张截图 → ${resolve(args.out)}`)
+  if (failed.length > 0) console.log(`未生成 ${failed.length} 张：${failed.join(', ')}`)
   if (args.a11y) {
     if (findings.length === 0) {
       console.log('对比度审计：未发现低于 WCAG AA 阈值的文本 ✓')

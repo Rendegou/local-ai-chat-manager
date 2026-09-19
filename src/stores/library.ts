@@ -16,6 +16,7 @@ import type {
   SessionFilter,
   SessionSummary,
   SourceRow,
+  SourceDefinition,
   StorageStats,
 } from '../types/ipc'
 
@@ -25,11 +26,18 @@ export type PageKey = 'conversations' | 'search' | 'sync' | 'settings'
 interface LibraryState {
   // ---- 主题 ----
   theme: 'system' | 'light' | 'dark'
+  /** 界面语言（'system' 时按 navigator.language 判断） */
+  language: 'system' | 'zh' | 'en'
 
   // ---- 导航 ----
   page: PageKey
-  /** 窄窗口下的筛选抽屉是否展开（纯 UI 状态） */
-  filtersOpen: boolean
+  /**
+   * 会话上下文抽屉是否展开（数据源 / 项目）。只在会话页有意义，
+   * 与 `navigationOpen` 严格分离——共用一个布尔值会出现「点来源筛选却弹出全局导航」。
+   */
+  sourcePaneOpen: boolean
+  /** 窄窗口（<768px）下的全局导航抽屉是否展开（纯 UI 状态） */
+  navigationOpen: boolean
   /** 设置草稿（null 表示与已保存设置一致） */
   settingsDraft: AppSettings | null
   /** 设置页是否有未保存草稿（用于离开前保护） */
@@ -40,6 +48,7 @@ interface LibraryState {
   // ---- 设置与数据源 ----
   settings: AppSettings | null
   sources: SourceRow[]
+  sourceCatalog: SourceDefinition[]
   machines: string[]
   projects: ProjectSummary[]
   stats: StorageStats | null
@@ -64,7 +73,8 @@ interface LibraryState {
 
   // ---- actions ----
   setPage: (page: PageKey) => void
-  setFiltersOpen: (open: boolean) => void
+  setSourcePaneOpen: (open: boolean) => void
+  setNavigationOpen: (open: boolean) => void
   /** 修改草稿（会自动更新「未保存」标记） */
   patchSettingsDraft: (patch: Partial<AppSettings>) => void
   /** 保存草稿；返回是否成功 */
@@ -113,13 +123,16 @@ const PAGE_SIZE = 200
 
 export const useLibrary = create<LibraryState>((set, get) => ({
   theme: 'system',
+  language: 'system',
   page: 'conversations',
-  filtersOpen: false,
+  sourcePaneOpen: false,
+  navigationOpen: false,
   settingsDraft: null,
   settingsDirty: false,
   pendingPage: null,
   settings: null,
   sources: [],
+  sourceCatalog: [],
   machines: [],
   projects: [],
   stats: null,
@@ -136,7 +149,8 @@ export const useLibrary = create<LibraryState>((set, get) => ({
   error: null,
 
   setPage: (page) => set({ page }),
-  setFiltersOpen: (filtersOpen) => set({ filtersOpen }),
+  setSourcePaneOpen: (sourcePaneOpen) => set({ sourcePaneOpen }),
+  setNavigationOpen: (navigationOpen) => set({ navigationOpen }),
   patchSettingsDraft: (patch) => {
     const current = get().settingsDraft ?? get().settings
     if (!current) return
@@ -144,11 +158,12 @@ export const useLibrary = create<LibraryState>((set, get) => ({
     // 与已保存设置逐字段比较，决定是否标记「未保存」
     const saved = get().settings
     const dirty = saved ? JSON.stringify(next) !== JSON.stringify(saved) : true
-    // 主题是外观偏好，选择时立即预览；保存仍由设置页显式完成。
+    // 主题与语言是外观偏好，选择时立即预览；保存仍由设置页显式完成。
     set({
       settingsDraft: next,
       settingsDirty: dirty,
       ...(patch.theme ? { theme: patch.theme } : {}),
+      ...(patch.language ? { language: patch.language } : {}),
     })
   },
 
@@ -162,7 +177,8 @@ export const useLibrary = create<LibraryState>((set, get) => ({
 
   resetSettingsDraft: () => {
     const savedTheme = get().settings?.theme ?? 'system'
-    set({ settingsDraft: null, settingsDirty: false, theme: savedTheme })
+    const savedLanguage = get().settings?.language ?? 'system'
+    set({ settingsDraft: null, settingsDirty: false, theme: savedTheme, language: savedLanguage })
   },
 
   setSettingsDirty: (settingsDirty) => set({ settingsDirty }),
@@ -171,10 +187,11 @@ export const useLibrary = create<LibraryState>((set, get) => ({
     const state = get()
     // 只在「离开设置页且草稿未保存」时拦截，其余情况直接跳转
     if (state.page === 'settings' && state.settingsDirty && page !== 'settings') {
-      set({ pendingPage: page })
+      set({ pendingPage: page, navigationOpen: false })
       return
     }
-    set({ page })
+    // 跳转后两个抽屉都不该继续遮住新页面
+    set({ page, navigationOpen: false, sourcePaneOpen: false })
   },
 
   confirmLeaveSettings: () => {
@@ -185,6 +202,9 @@ export const useLibrary = create<LibraryState>((set, get) => ({
       pendingPage: null,
       page: pendingPage ?? get().page,
       theme: settings?.theme ?? 'system',
+      language: settings?.language ?? 'system',
+      navigationOpen: false,
+      sourcePaneOpen: false,
     })
   },
 
@@ -196,7 +216,7 @@ export const useLibrary = create<LibraryState>((set, get) => ({
   bootstrap: async () => {
     try {
       const settings = await ipc.getSettings()
-      set({ settings, theme: settings.theme })
+      set({ settings, theme: settings.theme, language: settings.language })
       await Promise.all([get().loadSources(), get().loadProjects(), get().loadStats()])
       await get().loadSessions()
     } catch (error) {
@@ -207,7 +227,7 @@ export const useLibrary = create<LibraryState>((set, get) => ({
   loadSettings: async () => {
     try {
       const settings = await ipc.getSettings()
-      set({ settings, theme: settings.theme })
+      set({ settings, theme: settings.theme, language: settings.language })
     } catch (error) {
       set({ error: error as ipc.IpcError })
     }
@@ -217,7 +237,7 @@ export const useLibrary = create<LibraryState>((set, get) => ({
   updateSettings: async (settings) => {
     try {
       const saved = await ipc.saveSettings(settings)
-      set({ settings: saved, theme: saved.theme })
+      set({ settings: saved, theme: saved.theme, language: saved.language })
       // 数据源路径可能变化：重新探测 + 刷新列表
       await Promise.all([get().loadSources(), get().loadProjects()])
       await get().loadSessions()
@@ -230,8 +250,8 @@ export const useLibrary = create<LibraryState>((set, get) => ({
 
   loadSources: async () => {
     try {
-      const sources = await ipc.listSources()
-      set({ sources })
+      const [sources, sourceCatalog] = await Promise.all([ipc.listSources(), ipc.sourceCatalog()])
+      set({ sources, sourceCatalog })
     } catch (error) {
       set({ error: error as ipc.IpcError })
     }

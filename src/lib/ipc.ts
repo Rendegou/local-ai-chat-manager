@@ -169,3 +169,9 @@ export const dataDir = () => call<string>('data_dir')
 
 /** 本机 machine id。 */
 export const machineId = () => call<string>('machine_id')
+
+export const sourceCatalog = () => call<import('../types/ipc').SourceDefinition[]>('source_catalog')
+export const previewImport = (source: string, text: string) => call<import('../types/ipc').ImportPreview>('preview_import', { source, text })
+export const confirmImport = (token: string) => call<import('../types/ipc').ImportReport>('confirm_import', { token })
+export const cancelImport = (token: string) => call<void>('cancel_import', { token })
+export const saveImportTemplate = (path: string, source: string, format: string) => call<void>('save_import_template', { path, source, format })

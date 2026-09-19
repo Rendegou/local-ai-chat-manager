@@ -5,6 +5,9 @@
 //! - 扫描（`scan`）只收集路径与轻量元信息，解析（`parse_streaming`）才读正文；
 //! - 超大会话走流式解析：边解析边通过 [`MessageSink`] 写入数据库，不整体驻留内存。
 
+pub mod registry;
+pub mod native;
+pub mod workbuddy;
 pub mod codex;
 pub mod cursor;
 pub mod kimi;
@@ -91,6 +94,12 @@ pub trait ConversationAdapter: Send + Sync {
     /// 适配器标识（日志与设置页使用）。
     fn id(&self) -> &'static str;
 
+    fn watch_extensions(&self) -> Vec<String> {
+        registry::catalog().iter().find(|s| s.id == self.id())
+            .map(|s| s.watch_extensions).unwrap_or(&["json", "jsonl"])
+            .iter().map(|s| s.to_string()).collect()
+    }
+
     /// 探测数据源。返回多条结果用于「一个适配器覆盖多种来源」（如同步仓库适配器）。
     fn detect(&self, ctx: &AdapterContext<'_>) -> Vec<DetectionResult>;
 
@@ -117,7 +126,7 @@ pub trait ConversationAdapter: Send + Sync {
         let info = self.parse_streaming(ctx, descriptor, &mut sink)?;
         Ok(NormalizedSession {
             id: descriptor.session_id(),
-            source: descriptor.source,
+            source: descriptor.source.clone(),
             external_id: descriptor.external_id.clone(),
             title: info.title.clone().or_else(|| descriptor.title_hint.clone()),
             project_path: info
@@ -149,12 +158,7 @@ pub trait ConversationAdapter: Send + Sync {
 ///
 /// `repo_root` 为 Some 时追加同步仓库适配器，用于索引其他机器拉取下来的会话。
 pub fn default_adapters(repo_root: Option<String>) -> Vec<Box<dyn ConversationAdapter>> {
-    let mut list: Vec<Box<dyn ConversationAdapter>> = vec![
-        Box::new(CodexAdapter::new()),
-        Box::new(KimiAdapter::new()),
-        Box::new(CursorAdapter::new()),
-        Box::new(ZcodeAdapter::new()),
-    ];
+    let mut list = registry::native_adapters();
     if let Some(root) = repo_root {
         if !root.trim().is_empty() {
             list.push(Box::new(SyncRepoAdapter::new(root)));
@@ -354,5 +358,5 @@ pub fn count_child_dirs(
 
 /// 数据源标识列表（日志用）。
 pub fn source_ids() -> Vec<&'static str> {
-    SourceKind::ALL.iter().map(|s| s.as_str()).collect()
+    registry::catalog().iter().map(|s| s.id).collect()
 }

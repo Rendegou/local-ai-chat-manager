@@ -13,8 +13,17 @@ export {
   Chip,
   type Tone,
 } from './Status'
-export { PanelHeader, SectionCard, FormField, Field, EmptyState, Drawer } from './Surfaces'
-export { SectionLabel, SidebarRow, ListRow } from './Rows'
+export {
+  PanelHeader,
+  SectionCard,
+  Section,
+  FormField,
+  Field,
+  EmptyState,
+  Drawer,
+} from './Surfaces'
+export { Overlay, OverlayHeader, useOverlayTitle } from './Overlay'
+export { SectionLabel, PaneRow, ListRow } from './Rows'
 export { TextInput, DateInput, Select, Toggle, DirectoryInput, type SelectOption } from './Inputs'
 export { Menu, SegmentedNav, StatusArea, type MenuItem } from './Menu'
 export { Icon, Dot, type IconName } from './Icon'

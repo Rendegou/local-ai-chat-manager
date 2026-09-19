@@ -47,10 +47,15 @@ impl Drop for WatcherHandle {
 ///
 /// - 监听失败（目录不存在、权限不足）不会中断程序，只是少监听一个目录；
 /// - 回调在独立线程中执行，内部应避免长时间阻塞（实际动作是「触发一次增量扫描」）。
-pub fn start<F>(roots: Vec<PathBuf>, debounce: Duration, mut on_change: F) -> Result<WatcherHandle>
-where
-    F: FnMut() + Send + 'static,
-{
+#[derive(Clone)]
+pub struct WatchSpec { pub root: PathBuf, pub extensions: Vec<String> }
+
+pub fn start<F>(roots: Vec<PathBuf>, debounce: Duration, on_change: F) -> Result<WatcherHandle>
+where F: FnMut() + Send + 'static {
+    start_filtered(roots.into_iter().map(|root| WatchSpec { root, extensions: vec!["json".into(), "jsonl".into()] }).collect(),debounce,on_change)
+}
+pub fn start_filtered<F>(specs: Vec<WatchSpec>, debounce: Duration, mut on_change: F) -> Result<WatcherHandle>
+where F: FnMut() + Send + 'static {
     let (tx, rx) = channel::<notify::Result<notify::Event>>();
     let mut watcher = notify::recommended_watcher(move |res| {
         // 发送失败说明接收端已退出，忽略即可
@@ -59,7 +64,7 @@ where
     .map_err(|e| Error::adapter(format!("无法创建文件监听器: {e}")))?;
 
     let mut watched = 0usize;
-    for root in roots.iter().filter(|p| p.is_dir()) {
+    for root in specs.iter().map(|s| &s.root).filter(|p| p.is_dir()) {
         match watcher.watch(root, RecursiveMode::Recursive) {
             Ok(()) => {
                 watched += 1;
@@ -91,7 +96,7 @@ where
                 }
                 match rx.recv_timeout(Duration::from_millis(200)) {
                     Ok(Ok(event)) => {
-                        if !is_relevant(&event) {
+                        if !is_relevant(&event, &specs) {
                             continue;
                         }
                         // 有新事件：重置去抖窗口
@@ -121,12 +126,12 @@ where
 }
 
 /// 是否与「会话文件变化」相关：只看 JSON / JSONL，忽略日志、缓存、二进制写入。
-fn is_relevant(event: &notify::Event) -> bool {
+fn is_relevant(event: &notify::Event, specs: &[WatchSpec]) -> bool {
     event.paths.iter().any(|path| {
         if crate::paths::is_forbidden_path(path) {
             return false;
         }
-        matches!(extension(path).as_deref(), Some("jsonl") | Some("json"))
+        specs.iter().any(|s| path.starts_with(&s.root) && extension(path).map(|ext| s.extensions.contains(&ext)).unwrap_or(false))
     })
 }
 

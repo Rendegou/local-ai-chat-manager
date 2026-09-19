@@ -1,8 +1,27 @@
 # Local AI Chat Manager 前端视觉重构方案
 
+> ⚠️ **历史方案（Historical record）**
+>
+> 本文档是 2026-09-16 的视觉重构方案，**已不再作为执行依据**。它在当时完成了 token、
+> 页面层级与组件级重设计的探索，但产出的规则不够可执行（只有原则、缺少具体值），
+> 并且遗留了 10 项已确认的设计问题。
+>
+> 当前的规范与问题清单：
+>
+> - 界面规范（间距 / 字体 / 颜色 / 圆角 / 阴影 / 组件规则 / 页面信息架构）→ [DESIGN.md](./DESIGN.md)
+> - 二次重构的问题审计（10 项，含代码位置与推荐方案）→ [DESIGN_AUDIT.md](./DESIGN_AUDIT.md)
+> - 二次重构的执行结果与验证记录 → [UI_REFACTOR_REPORT.md](./UI_REFACTOR_REPORT.md)
+>
+> 阅读本文档时请把它当作「我们试过什么、为什么放弃」的记录，而不是规范。
+
 > 状态：v2 已落地（组件级重设计，2026-09-16）  
 > v1（本文档 §1–§11）完成了 token 与页面层级；v2 在其基础上把**每个组件当作物件重新设计**，见文末 §12。  
 > 适用范围：`src/app`、`src/components`、`src/features`、`src/gallery` 与 `src/index.css`。
+
+> **Status note / 状态说明（2026-09-19）**
+>
+> 视觉方向已从本文档描述的“档案桌/archive desk”演进为更平坦的三栏工作台（“平坦工作台”）：flat surfaces, 1px structural dividers, shadows only on overlays, copper accent only.
+> 本文档保留为历史设计探索记录；current tokens and rules live in `src/index.css` and `docs/DESIGN.md`.
 
 ## 1. 结论先行
 

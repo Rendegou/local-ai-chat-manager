@@ -1,11 +1,11 @@
 /**
- * 会话阅读器（右栏）。
+ * 会话阅读器（右栏，整个软件的视觉中心）。
  *
- * Phase 1 令牌化要点（规格 §6.1 阅读器部分）：
- * - 正文成为视觉主轴：assistant 用 reading 表面，user 用轻微表面差异区分；
- * - 工具调用/结果改成 console-like 块（等宽 + 独立表面），与普通正文明确分层；
- * - 正文与元数据字号提升到 13.5px / 12px，时间与序号用 11px mono；
- * - 头部元数据不再全部挤在标题后面（主标题 + 一行 meta，其余进次级行）。
+ * 平坦工作台要点：
+ * - 正文列 max-width 820px 居中，padding 32/40/80，宽屏不铺边；
+ * - assistant = 开放正文（无容器、无时间轴装饰）；user = 中性淡底卡（不染铜色）；
+ * - 工具调用/结果 = 平坦结构化卡片（1px 边框 + 高一级表面），这是 Card 该在的地方；
+ * - 正文 14px/1.65，元数据 12px，时间与序号 11.5px mono。
  *
  * 分页与定位：
  * - 双向自动翻页：接近底部/顶部时自动加载，没有手动「加载更多」按钮；
@@ -21,15 +21,17 @@ import { useVirtual } from '../../hooks/useVirtual'
 import { useLibrary } from '../../stores/library'
 import type { MessageRow } from '../../types/ipc'
 import { Button, Dot, EmptyState, Icon, IconButton, PanelHeader, Skeleton, Spinner, StatusPill } from '../../components/ui'
+import { useT } from '../../lib/i18n'
 
 /** 每次分页拉取的消息条数。 */
 const PAGE_SIZE = 200
 /** 单条消息超过该长度时折叠展示（索引侧已截断到 256KB）。 */
 const COLLAPSE_THRESHOLD = 4000
-/** 阅读宽度上限：过宽会显著降低长文可读性（规格 §5.2）。 */
-const READING_MAX_WIDTH = 920
+/** 阅读宽度上限：过宽会显著降低长文可读性。 */
+const READING_MAX_WIDTH = 820
 
 export function ConversationViewer() {
+  const t = useT()
   const { selected, selectedId, locateMessage, setLocateMessage } = useLibrary()
   const [messages, setMessages] = useState<MessageRow[]>([])
   const [loading, setLoading] = useState(false) // 初始 / 窗口重载
@@ -260,17 +262,17 @@ export function ConversationViewer() {
   if (!selected) {
     return (
       <>
-        <PanelHeader title="会话内容" />
+        <PanelHeader title={t('viewer.panelTitle')} />
         <div className="min-h-0 flex-1 overflow-hidden bg-reading">
           {selectedId ? (
-            <div className="mx-auto max-w-[920px] px-5 py-4">
+            <div className="mx-auto max-w-[900px] px-10 py-8">
               <Skeleton lines={3} />
               <Skeleton className="w-3/4" lines={2} />
             </div>
           ) : (
             <EmptyState
-              title="未选择会话"
-              description="从中间列表选择一个会话即可查看完整对话（原始文件始终只读）。"
+              title={t('viewer.emptyTitle')}
+              description={t('viewer.emptyDescription')}
             />
           )}
         </div>
@@ -282,26 +284,26 @@ export function ConversationViewer() {
     <>
       <PanelHeader
         sticky
-        title={selected.title ?? '无标题'}
+        title={selected.title ?? t('sessionList.untitled')}
         meta={
           <>
             <span className={sourceTextClass(selected.source)}>
               {sourceLabel(selected.source)}
             </span>
             <span className="px-1.5 text-ink-faint">·</span>
-            <span className="text-tech">{selected.projectPath ?? '未知项目'}</span>
+            <span className="text-tech">{selected.projectPath ?? t('format.unknownProject')}</span>
           </>
         }
         description={
           <span className="flex flex-wrap items-center gap-2">
-            <span className="tabular-nums">{selected.messageCount} 条消息</span>
+            <span className="tabular-nums">{t('viewer.messageCount', { n: selected.messageCount })}</span>
             <span className="text-ink-faint">·</span>
-            <span>更新于 {formatDateTime(selected.updatedAt)}</span>
+            <span>{t('viewer.updatedAt', { time: formatDateTime(selected.updatedAt) })}</span>
             <span className="text-ink-faint">·</span>
             <span>{syncStatusLabel(selected.syncStatus)}</span>
             {selected.partial ? (
-              <StatusPill tone="warning" title="存在未识别事件或损坏行，原始内容仍在原始文件中">
-                部分事件暂未识别
+              <StatusPill tone="warning" title={t('viewer.partialTitle')}>
+                {t('viewer.partialPill')}
               </StatusPill>
             ) : null}
           </span>
@@ -310,11 +312,11 @@ export function ConversationViewer() {
           <Button
             tone={toolVisible ? 'secondary' : 'ghost'}
             size="sm"
-            title="显示或隐藏工具调用与结果"
+            title={t('viewer.toggleToolsTitle')}
             aria-pressed={toolVisible}
             onClick={() => setToolVisible((value) => !value)}
           >
-            {toolVisible ? '隐藏工具消息' : '显示工具消息'}
+            {toolVisible ? t('viewer.hideTools') : t('viewer.showTools')}
           </Button>
         }
       />
@@ -323,20 +325,20 @@ export function ConversationViewer() {
         <div
           ref={containerRef}
           data-scroll-region="conversation-reader"
-          className="h-full overflow-y-auto bg-reading-glow"
+          className="h-full overflow-y-auto"
         >
           {visible.length === 0 ? (
             loading ? (
-              <div className="mx-auto max-w-[920px] px-5 py-4">
+              <div className="mx-auto max-w-[900px] px-10 py-8">
                 <Skeleton lines={4} />
               </div>
             ) : (
-              <EmptyState title="没有可展示的消息" description="该会话可能只包含遥测事件。" />
+              <EmptyState title={t('viewer.noMessages')} description={t('viewer.noMessagesDesc')} />
             )
           ) : (
             <div
-              className="conversation-stream mx-auto px-5 py-5"
-              style={{ maxWidth: READING_MAX_WIDTH + 32, position: 'relative', height: virtual.totalSize }}
+              className="conversation-stream mx-auto px-10 pb-20 pt-8"
+              style={{ maxWidth: READING_MAX_WIDTH + 80, position: 'relative', height: virtual.totalSize }}
             >
               {virtual.items.map((item) => {
                 const message = visible[item.index]
@@ -362,19 +364,19 @@ export function ConversationViewer() {
           {/* 底部：向下翻页进行中的指示；长会话加载完毕给一行安静的收尾 */}
           {loadingMore ? (
             <div className="flex justify-center py-3">
-              <Spinner label="加载更多消息…" />
+              <Spinner label={t('viewer.loadingMore')} />
             </div>
           ) : null}
           {!loadingMore && reachedEnd && messages.length > PAGE_SIZE ? (
             <div className="py-3 text-center text-meta text-ink-faint">
-              已加载全部 {messages.length} 条消息
+              {t('viewer.loadedAll', { n: messages.length })}
             </div>
           ) : null}
         </div>
         {/* 向上翻页指示：浮在视口顶部不占文档流（占位的话出现/消失会把内容顶动） */}
         {loadingEarlier ? (
           <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex justify-center py-2">
-            <Spinner label="加载更早的消息…" />
+            <Spinner label={t('viewer.loadingEarlier')} />
           </div>
         ) : null}
       </div>
@@ -383,11 +385,11 @@ export function ConversationViewer() {
 }
 
 /**
- * 单条消息块 —— 消息流的三种「物件」（石墨工作台核心）：
- * - user：染色实体卡（msg-user），「人说的话」一眼可辨；
- * - assistant：开放正文，阅读主轴，无容器装饰，行高放宽到 1.75；
+ * 单条消息块 —— 消息流的几种「物件」：
+ * - user：中性淡底卡（msg-user），「人说的话」可辨但不染色；
+ * - assistant：开放正文，阅读主轴，无容器装饰；
  * - reasoning：引文细线 + 斜体次要语气；
- * - tool_call / tool_result：内陷终端块（msg-term）——带头栏（工具名 / 类型 / 折叠），
+ * - tool_call / tool_result：平坦结构化卡片（msg-term）——带头栏（工具名 / 类型 / 折叠），
  *   默认展开（不改变既有默认行为），点击头栏可折叠单块；
  * - event：弱化单行，不占消息卡高度。
  *
@@ -403,6 +405,7 @@ const MessageBlock = memo(function MessageBlock({
   /** 搜索定位的目标消息：短暂高亮闪一下（见 index.css .msg-located） */
   located?: boolean
 }) {
+  const t = useT()
   const [expanded, setExpanded] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -424,7 +427,7 @@ const MessageBlock = memo(function MessageBlock({
 
   const copyButton = text ? (
     <IconButton
-      label={copied ? '已复制' : '复制内容'}
+      label={copied ? t('viewer.copied') : t('viewer.copyContent')}
       size="sm"
       onClick={copyText}
       className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
@@ -488,7 +491,7 @@ const MessageBlock = memo(function MessageBlock({
         {collapsed ? null : text ? (
           <pre className={bodyClass}>{shown}</pre>
         ) : (
-          <div className="px-3 py-2 text-meta text-ink-muted">（无文本内容）</div>
+          <div className="px-3 py-2 text-meta text-ink-muted">{t('viewer.noText')}</div>
         )}
         {!collapsed && isLong ? (
           <button
@@ -496,7 +499,7 @@ const MessageBlock = memo(function MessageBlock({
             onClick={() => setExpanded((value) => !value)}
             className="mx-3 mb-2 text-meta text-accent hover:underline"
           >
-            {expanded ? '收起' : `展开全部（${text.length} 字符）`}
+            {expanded ? t('viewer.collapse') : t('viewer.expandAll', { n: text.length })}
           </button>
         ) : null}
       </article>
@@ -504,7 +507,7 @@ const MessageBlock = memo(function MessageBlock({
   }
 
   const container = isUser
-    ? 'msg-user my-4 px-4 py-3'
+    ? 'msg-user my-4 px-3.5 py-3'
     : isReasoning
       ? 'msg-reason my-4 py-0.5'
       : 'message-assistant my-5'
@@ -515,7 +518,7 @@ const MessageBlock = memo(function MessageBlock({
         <span
           className={
             isUser
-              ? 'font-semibold text-accent'
+              ? 'font-medium text-ink'
               : isReasoning
                 ? 'text-ink-faint'
                 : 'font-medium text-ink'
@@ -532,7 +535,7 @@ const MessageBlock = memo(function MessageBlock({
       {text ? (
         <pre className={bodyClass}>{shown}</pre>
       ) : (
-        <div className="pt-0.5 text-meta text-ink-muted">（无文本内容）</div>
+        <div className="pt-0.5 text-meta text-ink-muted">{t('viewer.noText')}</div>
       )}
       {isLong ? (
         <button
@@ -540,7 +543,7 @@ const MessageBlock = memo(function MessageBlock({
           onClick={() => setExpanded((value) => !value)}
           className="mt-1 text-meta text-accent hover:underline"
         >
-          {expanded ? '收起' : `展开全部（${text.length} 字符）`}
+          {expanded ? t('viewer.collapse') : t('viewer.expandAll', { n: text.length })}
         </button>
       ) : null}
     </article>
@@ -549,9 +552,10 @@ const MessageBlock = memo(function MessageBlock({
 
 /** 序号 + 时间：tabular mono 右置，安静但可核对。 */
 function MsgTime({ message }: { message: MessageRow }) {
+  const t = useT()
   return (
     <span className="msg-time">
-      <span title="消息序号">#{message.sequence}</span>
+      <span title={t('viewer.sequence')}>#{message.sequence}</span>
       {message.timestamp ? <span> · {formatDateTime(message.timestamp)}</span> : null}
     </span>
   )

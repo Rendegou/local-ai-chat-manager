@@ -54,7 +54,7 @@ impl SyncRepoAdapter {
     }
 
     /// 该数据源的会话目录。
-    fn source_dir(&self, source: SourceKind) -> PathBuf {
+    fn source_dir(&self, source: &SourceKind) -> PathBuf {
         self.root.join(source.as_str())
     }
 }
@@ -69,8 +69,8 @@ impl ConversationAdapter for SyncRepoAdapter {
             return Vec::new();
         }
         let mut out = Vec::new();
-        for source in SourceKind::ALL {
-            let dir = self.source_dir(source);
+        for source in paths::sub_dirs(&self.root).iter().filter_map(|p| p.file_name().and_then(|s| s.to_str()).and_then(SourceKind::parse)) {
+            let dir = self.source_dir(&source);
             if !paths::is_dir(&dir) {
                 continue;
             }
@@ -80,7 +80,7 @@ impl ConversationAdapter for SyncRepoAdapter {
                 .map(|m| paths::sub_dirs(m).len())
                 .sum();
             out.push(DetectionResult {
-                source,
+                source: source.clone(),
                 found: true,
                 root: Some(dir),
                 session_hint: hint,
@@ -99,8 +99,8 @@ impl ConversationAdapter for SyncRepoAdapter {
             return Ok(Vec::new());
         }
         let mut out = Vec::new();
-        for source in SourceKind::ALL {
-            let source_dir = self.source_dir(source);
+        for source in paths::sub_dirs(&self.root).iter().filter_map(|p| p.file_name().and_then(|s| s.to_str()).and_then(SourceKind::parse)) {
+            let source_dir = self.source_dir(&source);
             for machine_dir in paths::sub_dirs(&source_dir) {
                 let machine_id = match machine_dir.file_name() {
                     Some(n) => n.to_string_lossy().to_string(),
@@ -121,7 +121,7 @@ impl ConversationAdapter for SyncRepoAdapter {
                         files.push(raw_ref("meta", &meta_path));
                     }
                     out.push(SessionDescriptor {
-                        source,
+                        source: source.clone(),
                         external_id,
                         primary_file: conversation,
                         session_dir,

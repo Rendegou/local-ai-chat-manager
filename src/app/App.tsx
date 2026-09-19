@@ -1,46 +1,42 @@
 /**
- * 应用外壳（规格 §5.1）：顶部工具栏分三个区域 + 页面主体 + 全局状态提示。
+ * 应用外壳：46px 桌面标题栏 + 全局导航 Rail + 页面主体 + 全局状态提示。
  *
- * 工具栏信息优先级：
- * - 左：产品名 + 当前资料库摘要（会话数 / 消息数）；
- * - 中：四个一级入口，用 segmented navigation 与普通按钮区分；
- * - 右：统一状态区（扫描进度 / 同步状态 / 数据源异常）+ 搜索 + 更多操作 + 扫描入口。
+ * 结构（docs/DESIGN.md §10）：
+ * ```
+ * [skip link → #main-content]
+ * ┌── 46px 标题栏：品牌 · 扫描进度 · needsAttention · 快速搜索 · 同步 · 更多 · 窗口控制 ──┐
+ * ├─ Rail（72px，≥768px 恒在）─┬─ 页面主体 ───────────────────────────────────────────┤
+ * ```
  *
- * 「扫描」不再永久占据主按钮：索引为空时它是主动作，之后退到「更多操作」，
- * 进度则进入统一状态区。
+ * 标题栏信息优先级（顶部只放「需要随时够到」的东西）：
+ * - 左：窄窗口导航按钮 + 品牌；
+ * - 右：扫描进度 / 需要处理的数据源 / 搜索 / 同步状态 / 更多操作 / 窗口控制。
+ *
+ * 与会话上下文的分工：
+ * - 全局导航（我在哪个区域）→ Rail，所有页面都有；
+ * - 会话上下文（我在看哪个来源/项目的会话）→ 会话页自己的 SourcePane，
+ *   进入搜索 / 同步 / 设置时完全不渲染。
+ *
+ * 数据源警告只统计 `SourceView.needsAttention`——「产品支持但本机未安装」是正常状态，
+ * 不再是警告（docs/DESIGN_AUDIT.md §1）。
  */
 import { useEffect, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 
 import * as ipc from '../lib/ipc'
-import { useLibrary, type PageKey } from '../stores/library'
+import { useLibrary } from '../stores/library'
 import { useSync } from '../stores/sync'
+import { useSourceViews } from '../lib/sources'
 import { ConversationsPage } from '../features/conversations/ConversationsPage'
 import { SearchPage } from '../features/search/SearchPage'
+import { QuickSearch } from '../features/search/QuickSearch'
 import { SyncPage } from '../features/sync/SyncPage'
 import { SettingsPage } from '../features/settings/SettingsPage'
-import {
-  Button,
-  Icon,
-  IconButton,
-  Menu,
-  Notice,
-  SegmentedNav,
-  Spinner,
-  StatusArea,
-  StatusPill,
-} from '../components/ui'
-import { describeFilter, formatRelative } from '../lib/format'
+import { AppNavRail } from './AppNavRail'
+import { Button, Drawer, Icon, IconButton, Menu, Notice, Spinner } from '../components/ui'
+import { LanguageProvider, resolveLanguage, useT } from '../lib/i18n'
 import { useMinWidth } from '../hooks/useMediaQuery'
 import appIcon from '../assets/brand-icon.png'
-
-/** 导航项。 */
-const NAV: Array<{ key: PageKey; label: string; hint: string }> = [
-  { key: 'conversations', label: '会话', hint: '浏览本机与已同步的会话历史' },
-  { key: 'search', label: '搜索', hint: '全文搜索所有会话' },
-  { key: 'sync', label: '同步', hint: '通过 Git 在多台电脑之间同步' },
-  { key: 'settings', label: '设置', hint: '数据目录 / 仓库 / 归档' },
-]
 
 /** 是否在真实 Tauri 窗口里（纯浏览器里隐藏窗口控制、拖动也不生效）。 */
 const IS_TAURI = '__TAURI_INTERNALS__' in window
@@ -88,6 +84,7 @@ function onCaptionMouseDown(event: ReactMouseEvent<HTMLElement>) {
 
 /** 窗口控制按钮（最小化 / 最大化-还原 / 关闭）：贴在窗口右上角，样式随主题。 */
 function WindowControls() {
+  const t = useT()
   const [maximized, setMaximized] = useState(false)
   useEffect(() => {
     const win = safeWindow()
@@ -110,11 +107,11 @@ function WindowControls() {
       .catch(() => {})
   }
   return (
-    <div className="-my-[9px] -mr-[16px] ml-1 flex self-stretch">
+    <div className="-mr-[12px] ml-1 flex self-stretch">
       <button
         type="button"
-        aria-label="最小化"
-        title="最小化"
+        aria-label={t('app.minimize')}
+        title={t('app.minimize')}
         className="win-btn"
         onClick={() => void safeWindow()?.minimize().catch(() => {})}
       >
@@ -122,8 +119,8 @@ function WindowControls() {
       </button>
       <button
         type="button"
-        aria-label={maximized ? '还原窗口' : '最大化'}
-        title={maximized ? '还原' : '最大化'}
+        aria-label={maximized ? t('app.restoreWindow') : t('app.maximize')}
+        title={maximized ? t('app.restore') : t('app.maximize')}
         className="win-btn"
         onClick={toggleMaximize}
       >
@@ -131,8 +128,8 @@ function WindowControls() {
       </button>
       <button
         type="button"
-        aria-label="关闭"
-        title="关闭"
+        aria-label={t('common.close')}
+        title={t('common.close')}
         className="win-btn win-btn-close"
         onClick={() => void safeWindow()?.close().catch(() => {})}
       >
@@ -143,10 +140,11 @@ function WindowControls() {
 }
 
 export default function App() {
+  const t = useT()
   const {
     page,
-    setPage,
     theme,
+    language,
     bootstrap,
     scanning,
     scanProgress,
@@ -154,17 +152,28 @@ export default function App() {
     error,
     setError,
     stats,
-    sources,
-    filter,
-    filtersOpen,
-    setFiltersOpen,
     pendingPage,
     confirmLeaveSettings,
     cancelLeaveSettings,
   } = useLibrary()
   const syncStatus = useSync((state) => state.status)
-  // 宽窗口下三栏并排，来源栏常驻；窄窗口改为抽屉，由工具栏「筛选」按钮唤出
-  const wideEnough = useMinWidth('xl')
+  const sourceViews = useSourceViews()
+  // ≥768px：Rail 常驻；<768px：Rail 收进标题栏导航抽屉（与会话上下文抽屉互相独立）
+  const railVisible = useMinWidth('md')
+  const navigationOpen = useLibrary((state) => state.navigationOpen)
+  // Ctrl/Cmd + K 快速搜索面板
+  const [quickOpen, setQuickOpen] = useState(false)
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setQuickOpen((value) => !value)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
 
   // 启动：加载设置 / 数据源 / 会话；订阅后端事件
   useEffect(() => {
@@ -212,108 +221,102 @@ export default function App() {
   }, [theme])
 
   const indexed = (stats?.sessions ?? 0) > 0
-  const missingSources = sources.filter((source) => !source.found)
-  const filterSummary = describeFilter(filter)
-  const filtersActive = filterSummary !== '全部会话'
+  // 只有「真的需要处理」的来源才报警：部分解析 / 读取失败 / 手工配置后目录消失。
+  // 单纯「产品支持但本机没装」是正常状态，不再计数。
+  const attention = sourceViews.filter((view) => view.needsAttention)
+  const syncDot = syncStatus?.conflict
+    ? 'bg-danger'
+    : syncStatus?.isRepo
+      ? 'bg-success'
+      : 'bg-ink-faint'
+  const syncHint = syncStatus?.conflict
+    ? t('app.syncConflict')
+    : syncStatus?.isRepo
+      ? t('app.syncOk')
+      : t('app.syncUnset')
 
   return (
+    <LanguageProvider language={resolveLanguage(language)}>
     <div className="app-shell flex h-full flex-col text-ink">
-      {/* 极端缩放（200%）下工具栏允许换行：宁可占两行，也不要整页横向滚动；
-          无边框窗口下整个头部同时是拖动区（双击空白切换最大化） */}
+      {/* 键盘用户的第一个 Tab 落点：跳过整条导航直达内容 */}
+      <a href="#main-content" className="skip-link">
+        {t('app.skipToContent')}
+      </a>
+
+      {/* 无边框窗口下整个头部同时是拖动区（双击空白切换最大化） */}
       <header className="app-header select-none" onMouseDown={onCaptionMouseDown}>
-        {/* 左：品牌 + 资料库摘要 */}
+        {/* 窄窗口（<768px）：全局导航收进抽屉 */}
+        {!railVisible ? (
+          <IconButton
+            label={navigationOpen ? t('app.navigationTitle') : t('app.openNavigation')}
+            aria-expanded={navigationOpen}
+            aria-haspopup="dialog"
+            onClick={() => useLibrary.getState().setNavigationOpen(!navigationOpen)}
+          >
+            <Icon name="menu" />
+          </IconButton>
+        ) : null}
+
+        {/* 左：品牌（小图标 + 产品名） */}
         <div className="app-brand">
-          <span className="app-brand-icon">
-            <img src={appIcon} alt="" className="h-5 w-5 rounded-[5px]" />
-          </span>
-          <span className="app-brand-copy">
-            <span className="app-brand-title">Local Chats</span>
-            <span className="app-brand-meta">
-              {stats ? `${stats.sessions} 个会话 · ${stats.messages} 条消息` : '本地索引尚未就绪'}
-            </span>
-          </span>
+          {/* 显式宽高：避免图片加载完成前的布局跳动 */}
+          <img src={appIcon} alt="" width={18} height={18} className="h-[18px] w-[18px] rounded-chip" />
+          <span className="app-brand-title">Local Chats</span>
         </div>
 
-        {/* 中：一级导航（窄到放不下时换行到第二行） */}
-        <div className="app-primary-nav flex min-w-0 items-center">
-          <SegmentedNav
-            items={NAV.map((item) => ({ key: item.key, label: item.label, hint: item.hint }))}
-            current={page}
-            onSelect={(key) => useLibrary.getState().requestPage(key as PageKey)}
-          />
-        </div>
-
-        {/* 右：统一状态区 + 操作 */}
+        {/* 右：状态 + 操作 + 窗口控制 */}
         <div className="app-actions">
-          <StatusArea>
-            {scanning ? (
-              <Spinner
-                label={
-                  scanProgress ? `扫描 ${scanProgress.done}/${scanProgress.total}` : '扫描中…'
-                }
-              />
-            ) : null}
-            {missingSources.length > 0 ? (
-              <StatusPill tone="warning" title="未探测到数据目录，可在设置中手工指定">
-                {missingSources.length} 个数据源未找到
-              </StatusPill>
-            ) : null}
-            <StatusPill
-              tone={syncStatus?.conflict ? 'danger' : syncStatus?.isRepo ? 'success' : 'neutral'}
-              title={syncStatus?.conflict ? '存在同步冲突' : '同步状态'}
+          {scanning ? (
+            <Spinner
+              label={scanProgress ? t('app.scanProgress', { done: scanProgress.done, total: scanProgress.total }) : t('app.scanning')}
+            />
+          ) : null}
+          {attention.length > 0 ? (
+            <IconButton
+              label={t('app.attentionSources', { n: attention.length })}
+              onClick={() => useLibrary.getState().requestPage('settings')}
             >
-              {syncStatus?.conflict
-                ? '同步冲突'
-                : syncStatus?.isRepo
-                  ? `已同步 ${formatRelative(syncStatus.lastPush ?? syncStatus.lastPull)}`
-                  : '未配置同步'}
-            </StatusPill>
-          </StatusArea>
-
-          {page === 'conversations' ? (
-            <Button
-              tone={filtersActive ? 'secondary' : 'ghost'}
-              size="sm"
-              aria-expanded={!wideEnough ? filtersOpen : undefined}
-              title="按来源 / 项目筛选会话"
-              onClick={() => {
-                if (wideEnough) {
-                  // 宽窗口下来源栏常驻，这里只把筛选重置为全部
-                  useLibrary.getState().resetFilter()
-                } else {
-                  setFiltersOpen(!filtersOpen)
-                }
-              }}
-            >
-              <Icon name="filter" />
-              {filtersActive ? filterSummary : wideEnough ? '全部会话' : '筛选'}
-            </Button>
+              <Icon name="warning" className="text-warning" />
+            </IconButton>
           ) : null}
 
-          <IconButton label="搜索会话内容" onClick={() => setPage('search')}>
+          <IconButton label={t('app.quickSearch')} onClick={() => setQuickOpen(true)}>
             <Icon name="search" />
           </IconButton>
 
+          <IconButton
+            label={t('app.syncLabel', { hint: syncHint })}
+            onClick={() => useLibrary.getState().requestPage('sync')}
+          >
+            <span className="relative">
+              <Icon name="refresh" />
+              <span
+                aria-hidden="true"
+                className={`absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full ${syncDot}`}
+              />
+            </span>
+          </IconButton>
+
+          {/* 「设置」不再出现在这里：Rail 已经是一级入口，重复入口只会让人犹豫 */}
           <Menu
             items={[
-              { label: '立即扫描', onClick: () => void scan(false), hint: '增量' },
-              { label: '重建索引', onClick: () => void scan(true), tone: 'danger', hint: '全量' },
+              { label: t('menu.scanNow'), onClick: () => void scan(false), hint: t('menu.scanNowHint') },
+              { label: t('menu.rebuildIndex'), onClick: () => void scan(true), tone: 'danger', hint: t('menu.rebuildIndexHint') },
               {
-                label: '打开数据目录',
+                label: t('menu.openDataDir'),
                 onClick: () => {
                   void ipc.dataDir().then((dir) => {
                     if (dir) void import('@tauri-apps/plugin-opener').then((m) => m.openPath(dir))
                   })
                 },
               },
-              { label: '设置', onClick: () => setPage('settings') },
             ]}
           />
 
           {/* 首次使用（索引为空）时，「扫描」是主动作 */}
           {!indexed && !scanning ? (
-            <Button tone="primary" onClick={() => void scan(false)}>
-              扫描本地会话
+            <Button tone="primary" size="sm" onClick={() => void scan(false)}>
+              {t('app.scanLocalChats')}
             </Button>
           ) : null}
         </div>
@@ -322,33 +325,12 @@ export default function App() {
         <WindowControls />
       </header>
 
-      {filtersOpen && !wideEnough && page === 'conversations' ? (
-        <div className="border-b border-line bg-panel px-3.5 py-2">
-          <Notice
-            tone="info"
-            title={`筛选：${filterSummary}`}
-            actions={
-              <>
-                <Button size="sm" tone="ghost" onClick={() => useLibrary.getState().resetFilter()}>
-                  清除筛选
-                </Button>
-                <Button size="sm" onClick={() => setFiltersOpen(false)}>
-                  收起
-                </Button>
-              </>
-            }
-          >
-            窄窗口下来源/项目栏收进抽屉；在会话页左侧抽屉中选择即可。
-          </Notice>
-        </div>
-      ) : null}
-
       {/* 设置页有未保存草稿时，离开前先确认（规格 §6.4） */}
       {pendingPage ? (
-        <div className="border-b border-line bg-panel px-3.5 py-2">
+        <div className="border-b border-line bg-panel px-4 py-2">
           <Notice
             tone="warning"
-            title="设置有未保存的修改"
+            title={t('notice.unsavedTitle')}
             actions={
               <>
                 <Button
@@ -358,30 +340,51 @@ export default function App() {
                       if (ok) confirmLeaveSettings()
                     })
                   }}
-                  title="保存当前修改并前往目标页面"
+                  title={t('notice.saveAndLeaveTitle')}
                 >
-                  保存并离开
+                  {t('notice.saveAndLeave')}
                 </Button>
                 <Button size="sm" onClick={confirmLeaveSettings}>
-                  放弃修改
+                  {t('notice.discard')}
                 </Button>
                 <Button size="sm" tone="ghost" onClick={cancelLeaveSettings}>
-                  留在本页
+                  {t('notice.stay')}
                 </Button>
               </>
             }
           >
-            修改尚未保存，离开后不会生效。
+            {t('notice.unsavedBody')}
           </Notice>
         </div>
       ) : null}
 
-      <main className="flex min-h-0 flex-1">
-        {page === 'conversations' ? <ConversationsPage /> : null}
-        {page === 'search' ? <SearchPage /> : null}
-        {page === 'sync' ? <SyncPage /> : null}
-        {page === 'settings' ? <SettingsPage /> : null}
-      </main>
+      <div className="flex min-h-0 flex-1">
+        {/* 全局导航：≥768px 常驻。它不含来源/项目——那是会话页自己的事 */}
+        {railVisible ? <AppNavRail /> : null}
+
+        <main id="main-content" className="flex min-w-0 flex-1">
+          {page === 'conversations' ? <ConversationsPage /> : null}
+          {page === 'search' ? <SearchPage /> : null}
+          {page === 'sync' ? <SyncPage /> : null}
+          {page === 'settings' ? <SettingsPage /> : null}
+        </main>
+      </div>
+
+      {/* Ctrl/Cmd + K 快速搜索 */}
+      <QuickSearch open={quickOpen} onClose={() => setQuickOpen(false)} />
+
+      {/* <768px 的全局导航抽屉：与会话上下文抽屉是两套完全独立的状态 */}
+      {!railVisible && navigationOpen ? (
+        <Drawer
+          title={t('app.navigationTitle')}
+          onClose={() => useLibrary.getState().setNavigationOpen(false)}
+          widthClass="w-[240px]"
+        >
+          <div className="px-2 py-1">
+            <AppNavRail variant="list" />
+          </div>
+        </Drawer>
+      ) : null}
 
       {/* 错误提示：保留到用户关闭（失败反馈不应自动消失） */}
       {error ? (
@@ -393,7 +396,7 @@ export default function App() {
               <>
                 <span className="text-tech text-ink-faint">{error.kind}</span>
                 <Button tone="ghost" size="sm" onClick={() => setError(null)}>
-                  关闭
+                  {t('common.close')}
                 </Button>
               </>
             }
@@ -403,5 +406,6 @@ export default function App() {
         </div>
       ) : null}
     </div>
+    </LanguageProvider>
   )
 }

@@ -24,6 +24,8 @@ export type IconName =
   | 'archive'
   | 'branch'
   | 'terminal'
+  | 'chat'
+  | 'menu'
   | 'minimize'
   | 'maximize'
   | 'restore'
@@ -120,6 +122,15 @@ const PATHS: Record<IconName, ReactNode> = {
       <path d="M8.8 11.4h3" />
     </>
   ),
+  /* 会话气泡 */
+  chat: (
+    <path
+      d="M13.4 10.6a1.3 1.3 0 0 1-1.3 1.3H5.6l-3 2V3.9a1.3 1.3 0 0 1 1.3-1.3h8.2a1.3 1.3 0 0 1 1.3 1.3v6.7Z"
+      strokeLinejoin="round"
+    />
+  ),
+  /* 抽屉菜单（窄窗口） */
+  menu: <path d="M2.6 4.4h10.8M2.6 8h10.8M2.6 11.6h10.8" />,
   /* 窗口控制（自绘标题栏）：最小化横线 / 最大化方框 / 还原叠框 */
   minimize: <path d="M3.4 8h9.2" />,
   maximize: <rect x="3.4" y="3.4" width="9.2" height="9.2" rx="1.2" />,
@@ -159,14 +170,14 @@ export function Icon({
 }
 
 /**
- * 来源/中性身份圆点：身份标识不靠字形，用一枚色点（始终伴随文字标签出现，
+ * 身份 / 状态圆点：不靠字形表达，用一枚色点（始终伴随文字标签出现，
  * 不承担独立语义）。tone 对应语义色或来源色。
  */
 export function Dot({
   tone = 'neutral',
   className = '',
 }: {
-  tone?: 'neutral' | 'accent' | 'codex' | 'kimi'
+  tone?: 'neutral' | 'accent' | 'codex' | 'kimi' | 'success' | 'warning' | 'danger'
   className?: string
 }) {
   const color =
@@ -176,6 +187,12 @@ export function Dot({
         ? 'bg-codex'
         : tone === 'kimi'
           ? 'bg-kimi'
-          : 'bg-ink-faint'
+          : tone === 'success'
+            ? 'bg-success'
+            : tone === 'warning'
+              ? 'bg-warning'
+              : tone === 'danger'
+                ? 'bg-danger'
+                : 'bg-ink-faint'
   return <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${color} ${className}`} />
 }

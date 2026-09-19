@@ -20,6 +20,7 @@
 pub mod adapters;
 pub mod archive;
 pub mod error;
+pub mod imports;
 pub mod model;
 pub mod parser;
 pub mod paths;
@@ -59,6 +60,8 @@ pub struct Library {
     settings: RwLock<AppSettings>,
     machine: MachineIdentity,
     db: storage::Database,
+    operation_lock: std::sync::Mutex<()>,
+    import_previews: std::sync::Mutex<std::collections::HashMap<String, (std::time::Instant, imports::ImportPackage, Vec<String>)>>,
 }
 
 impl Library {
@@ -79,6 +82,8 @@ impl Library {
             settings: RwLock::new(settings),
             machine,
             db,
+            operation_lock: std::sync::Mutex::new(()),
+            import_previews: Default::default(),
         })
     }
 
@@ -103,7 +108,8 @@ impl Library {
     }
 
     /// 更新设置（校验 → 落盘 → 生效）。
-    pub fn update_settings(&self, new_settings: AppSettings) -> Result<AppSettings> {
+    pub fn update_settings(&self, mut new_settings: AppSettings) -> Result<AppSettings> {
+        new_settings.migrate_sources();
         new_settings.validate()?;
         let snapshot_policy_changed = self
             .settings
@@ -127,12 +133,15 @@ impl Library {
     /// 构造当前设置下的适配器集合（含同步仓库适配器）。
     pub fn adapters(&self) -> Vec<Box<dyn adapters::ConversationAdapter>> {
         let settings = self.settings();
-        adapters::default_adapters(
+        let mut list = adapters::default_adapters(
             settings
                 .repo_root()
                 .map(|p| error::display_path(&p))
                 .filter(|p| !p.is_empty()),
-        )
+        );
+        list.retain(|a| a.is_remote() || settings.source_enabled(a.id()));
+        list.push(Box::new(imports::ImportedAdapter { root: self.data_dir.join("imports") }));
+        list
     }
 
     /// 探测所有数据源并写入 `sources` 表。
@@ -171,6 +180,11 @@ impl Library {
         force: bool,
         progress: &mut dyn FnMut(scanner::ScanProgress),
     ) -> Result<scanner::ScanReport> {
+        let _guard = self.operation_lock.lock().map_err(|_| Error::config("扫描状态不可用"))?;
+        self.scan_unlocked(force, progress)
+    }
+
+    fn scan_unlocked(&self, force: bool, progress: &mut dyn FnMut(scanner::ScanProgress)) -> Result<scanner::ScanReport> {
         let settings = self.settings();
         let adapters = self.adapters();
         let ctx = adapters::AdapterContext {
@@ -196,11 +210,13 @@ impl Library {
             settings: &settings,
             machine_id: &self.machine.machine_id,
         };
-        let roots = scanner::watch_roots(&adapters, &ctx);
+        let roots: Vec<scanner::watcher::WatchSpec> = adapters.iter().filter(|a| !a.is_remote()).flat_map(|a| {
+            a.detect(&ctx).into_iter().filter_map(|d| d.root).map(|root| scanner::watcher::WatchSpec { root, extensions: a.watch_extensions() }).collect::<Vec<_>>()
+        }).collect();
         if roots.is_empty() {
             return Err(Error::adapter("没有可监听的会话目录".to_string()));
         }
-        scanner::watcher::start(
+        scanner::watcher::start_filtered(
             roots,
             std::time::Duration::from_millis(scanner::watcher::DEFAULT_DEBOUNCE_MS),
             on_change,
@@ -265,7 +281,37 @@ impl Library {
 
     /// 数据源探测结果（缓存于 sources 表）。
     pub fn list_sources(&self) -> Result<Vec<storage::types::SourceRow>> {
-        self.db.list_sources()
+        let mut rows = self.db.list_sources()?;
+        let counts: Vec<(String, usize)> = self.db.with_conn(|c| {
+            let mut s = c.prepare("SELECT source, COUNT(*) FROM sessions GROUP BY source")?;
+            let values = s.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<std::result::Result<Vec<_>,_>>()?;
+            Ok(values)
+        })?;
+        for def in adapters::registry::catalog() {
+            if !rows.iter().any(|r| r.id == def.id) {
+                rows.push(storage::types::SourceRow { id: def.id.into(), display_name: def.display_name.into(), root_path: None, found: false, session_hint: 0, manual: false, notes: Some(def.description.into()), detected_at: None });
+            }
+        }
+        for (id,count) in counts {
+            if let Some(row) = rows.iter_mut().find(|r| r.id == id) { row.session_hint = count; }
+            else { rows.push(storage::types::SourceRow { display_name: id.clone(), id, root_path: None, found: true, session_hint: count, manual: true, notes: Some("导入或同步历史".into()), detected_at: None }); }
+        }
+        Ok(rows)
+    }
+
+    pub fn source_catalog(&self) -> Result<Vec<adapters::registry::SourceCatalogEntry>> {
+        let rows = self.list_sources()?;
+        let settings = self.settings();
+        adapters::registry::catalog().iter().map(|def| {
+            let row = rows.iter().find(|r| r.id == def.id);
+            let partial: bool = self.db.with_conn(|c| Ok(c.query_row("SELECT EXISTS(SELECT 1 FROM sessions WHERE source=?1 AND partial=1)",[def.id],|r| r.get(0))?))?;
+            let notes = row.and_then(|r| r.notes.clone());
+            let status = if notes.as_deref().map(|s| s.contains("失败")).unwrap_or(false) { "error" }
+                else if partial || notes.as_deref().map(|s| s.contains("仅发现索引")).unwrap_or(false) { "partial" }
+                else if row.map(|r| r.found).unwrap_or(false) || (def.access == "import" && row.map(|r| r.session_hint > 0).unwrap_or(false)) { "available" }
+                else { "missing" };
+            Ok(adapters::registry::SourceCatalogEntry { definition: def.clone(), status: status.into(), enabled: settings.source_enabled(def.id), notes })
+        }).collect()
     }
 
     /// 全文搜索。
@@ -286,8 +332,9 @@ impl Library {
         &self,
         progress: &mut dyn FnMut(scanner::ScanProgress),
     ) -> Result<scanner::ScanReport> {
+        let _guard = self.operation_lock.lock().map_err(|_| Error::config("扫描状态不可用"))?;
         self.db.reset()?;
-        self.scan(true, progress)
+        self.scan_unlocked(true, progress)
     }
 
     // ------------------------------------------------------------------
@@ -326,9 +373,75 @@ impl Library {
         options: &sync::SyncOptions,
         progress: &mut dyn FnMut(String),
     ) -> Result<sync::SyncReport> {
+        let _guard = self.operation_lock.lock().map_err(|_| Error::config("扫描状态不可用"))?;
         let settings = self.settings();
         let adapters = self.adapters();
         sync::sync_now(&self.sync_context(&settings, &adapters), options, progress)
+    }
+
+    pub fn preview_import(&self, source: &str, text: &str) -> Result<imports::ImportPreview> {
+        if !self.settings().source_enabled(source) { return Err(Error::config("请先在设置中启用此数据源")); }
+        let (package,warnings) = imports::parse_input(source,text)?;
+        let token = uuid::Uuid::new_v4().to_string();
+        let preview = imports::preview(&package,warnings.clone(),token.clone());
+        let mut pending = self.import_previews.lock().map_err(|_| Error::config("导入状态不可用"))?;
+        pending.retain(|_,(t,_,_)| t.elapsed().as_secs() < 1800);
+        if pending.len() >= 8 { return Err(Error::config("待确认导入过多，请取消已有预览")); }
+        pending.insert(token,(std::time::Instant::now(),package,warnings));
+        Ok(preview)
+    }
+
+    pub fn cancel_import(&self, token: &str) -> Result<()> {
+        self.import_previews.lock().map_err(|_| Error::config("导入状态不可用"))?.remove(token);
+        Ok(())
+    }
+
+    pub fn confirm_import(&self, token: &str) -> Result<imports::ImportReport> {
+        let _guard = self.operation_lock.lock().map_err(|_| Error::config("扫描状态不可用"))?;
+        let (created,package,warnings) = self.import_previews.lock().map_err(|_| Error::config("导入状态不可用"))?
+            .remove(token).ok_or_else(|| Error::config("预览已失效，请重新预览"))?;
+        if created.elapsed().as_secs() >= 1800 { return Err(Error::config("预览已过期，请重新预览")); }
+        let root = self.data_dir.join("imports");
+        let mut report = imports::ImportReport { failed: warnings.len(), warnings, ..Default::default() };
+        let mut written = Vec::new();
+        let settings = self.settings();
+        for s in package.sessions {
+            if !settings.source_enabled(s.source.as_str()) { report.failed += 1; report.warnings.push("来源已停用，请启用后重试".into()); continue; }
+            let path = imports::managed_path(&root,&s);
+            let id = format!("{}:{}:{}",s.source.as_str(),self.machine_id(),s.external_id.as_deref().unwrap_or_default());
+            let bytes = serde_json::to_vec_pretty(&s)?;
+            if let Some(existing) = self.db.get_session(&id)? {
+                if existing.primary_file.as_deref() != Some(error::display_path(&path).as_str()) {
+                    report.duplicates += 1; report.warnings.push("已存在同 ID 原生会话，保留原生记录".into()); continue;
+                }
+                if std::fs::read(&path).ok().as_deref() == Some(bytes.as_slice()) {
+                    report.duplicates += 1; continue;
+                }
+            }
+            let result = (|| -> Result<()> {
+                let parent = path.parent().ok_or_else(|| Error::config("导入路径无效"))?;
+                std::fs::create_dir_all(parent).map_err(|e| Error::io(parent,e))?;
+                let temp = path.with_extension(format!("{}.tmp",uuid::Uuid::new_v4()));
+                std::fs::write(&temp,&bytes).map_err(|e| Error::io(&temp,e))?;
+                if let Err(e) = std::fs::rename(&temp,&path) { let _ = std::fs::remove_file(&temp); return Err(Error::io(&path,e)); }
+                Ok(())
+            })();
+            match result {
+                Ok(()) => written.push((id, blake3::hash(&bytes).to_hex().to_string(), imports::partial(&s))),
+                Err(e) => { report.failed += 1; report.warnings.push(e.user_message()); }
+            }
+        }
+        if !written.is_empty() {
+            let adapters: Vec<Box<dyn adapters::ConversationAdapter>> = vec![Box::new(imports::ImportedAdapter { root })];
+            let ctx = adapters::AdapterContext { settings: &settings, machine_id: self.machine_id() };
+            let scan = scanner::scan(&self.db,&adapters,&ctx,&scanner::ScanOptions::default(),&mut |_| {})?;
+            report.warnings.extend(scan.warnings);
+            for (id,hash,partial) in written {
+                if self.db.get_session(&id)?.and_then(|s| s.content_hash).as_deref() == Some(&hash) { report.success += 1; report.partial += usize::from(partial); }
+                else { report.failed += 1; report.warnings.push("副本已保存但索引失败，可重新扫描恢复".into()); }
+            }
+        }
+        Ok(report)
     }
 
     /// git 日志。

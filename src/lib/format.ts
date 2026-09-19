@@ -2,7 +2,29 @@
  * 展示层格式化工具：时间、体积、角色标签等。
  *
  * 所有时间都按「本地时区」展示，但排序 / 筛选仍然使用后端的 RFC3339 字符串。
+ * 日期时间一律走 `Intl.DateTimeFormat`（docs/DESIGN.md §2）：手工拼接 `getFullYear()`
+ * 会固定成 `YYYY-MM-DD HH:mm:ss`，既不跟随系统区域设置，也不支持 12 小时制，
+ * 结果是同一屏里两种时间格式并存。
+ *
+ * formatter 按「语言 + 选项」缓存 —— 每次调用新建 `Intl.DateTimeFormat` 是这个页面
+ * 最容易被忽视的开销（虚拟列表一次滚动就是几百次）。
+ *
+ * 文案随界面语言（lib/i18n 的模块级当前语言，由 LanguageProvider 同步）。
  */
+import { getLanguage, t, type Language } from './i18n'
+
+/** formatter 缓存键 → 实例。 */
+const dateFormatters = new Map<string, Intl.DateTimeFormat>()
+
+function formatter(options: Intl.DateTimeFormatOptions, language: Language = getLanguage()) {
+  const key = `${language}:${JSON.stringify(options)}`
+  let instance = dateFormatters.get(key)
+  if (!instance) {
+    instance = new Intl.DateTimeFormat(language === 'zh' ? 'zh-CN' : 'en-US', options)
+    dateFormatters.set(key, instance)
+  }
+  return instance
+}
 
 /** 相对时间（今天 / 昨天 / N 天前 / 具体日期）。 */
 export function formatRelative(iso: string | null | undefined): string {
@@ -15,44 +37,48 @@ export function formatRelative(iso: string | null | undefined): string {
   const hour = 60 * minute
   const day = 24 * hour
 
-  if (diffMs < minute) return '刚刚'
-  if (diffMs < hour) return `${Math.floor(diffMs / minute)} 分钟前`
-  if (isSameDay(date, now)) return `今天 ${formatTime(date)}`
+  if (diffMs < minute) return t('format.justNow')
+  if (diffMs < hour) return t('format.minutesAgo', { n: Math.floor(diffMs / minute) })
+  if (isSameDay(date, now)) return t('format.todayAt', { time: formatTime(date) })
   const yesterday = new Date(now.getTime() - day)
-  if (isSameDay(date, yesterday)) return `昨天 ${formatTime(date)}`
-  if (diffMs < 7 * day) return `${Math.floor(diffMs / day)} 天前`
+  if (isSameDay(date, yesterday)) return t('format.yesterdayAt', { time: formatTime(date) })
+  if (diffMs < 7 * day) return t('format.daysAgo', { n: Math.floor(diffMs / day) })
   return formatDate(date)
 }
 
-/** 日期字符串（YYYY-MM-DD）。 */
+/** 日期（跟随系统区域设置）。 */
 export function formatDate(date: Date): string {
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
+  return formatter({ year: 'numeric', month: '2-digit', day: '2-digit' }).format(date)
 }
 
-/** 时间字符串（HH:mm）。 */
+/** 时间（跟随系统区域设置，支持 12/24 小时制）。 */
 export function formatTime(date: Date): string {
-  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+  return formatter({ hour: '2-digit', minute: '2-digit' }).format(date)
 }
 
-/** 完整时间（YYYY-MM-DD HH:mm:ss）。 */
+/** 完整日期时间。 */
 export function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return '—'
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return iso
-  return `${formatDate(date)} ${formatTime(date)}:${String(date.getSeconds()).padStart(2, '0')}`
+  return formatter({
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).format(date)
 }
 
-/** 列表分组用的日期标题（今天 / 昨天 / YYYY-MM-DD）。 */
+/** 列表分组用的日期标题（今天 / 昨天 / 具体日期）。 */
 export function dateGroupLabel(iso: string | null | undefined): string {
-  if (!iso) return '未知时间'
+  if (!iso) return t('format.unknownTime')
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return iso
   const now = new Date()
-  if (isSameDay(date, now)) return '今天'
-  if (isSameDay(date, new Date(now.getTime() - 86_400_000))) return '昨天'
+  if (isSameDay(date, now)) return t('format.today')
+  if (isSameDay(date, new Date(now.getTime() - 86_400_000))) return t('format.yesterday')
   return formatDate(date)
 }
 
@@ -120,17 +146,17 @@ export function sourceTextClass(source: string): string {
 export function roleLabel(role: string): string {
   switch (role) {
     case 'user':
-      return '用户'
+      return t('format.role.user')
     case 'assistant':
-      return '助手'
+      return t('format.role.assistant')
     case 'system':
-      return '系统'
+      return t('format.role.system')
     case 'tool':
-      return '工具'
+      return t('format.role.tool')
     case 'developer':
-      return '开发者'
+      return t('format.role.developer')
     default:
-      return '事件'
+      return t('format.role.event')
   }
 }
 
@@ -138,15 +164,15 @@ export function roleLabel(role: string): string {
 export function kindLabel(kind: string): string {
   switch (kind) {
     case 'message':
-      return '消息'
+      return t('format.kind.message')
     case 'tool_call':
-      return '工具调用'
+      return t('format.kind.toolCall')
     case 'tool_result':
-      return '工具结果'
+      return t('format.kind.toolResult')
     case 'reasoning_summary':
-      return '推理摘要'
+      return t('format.kind.reasoning')
     default:
-      return '事件'
+      return t('format.kind.event')
   }
 }
 
@@ -154,15 +180,15 @@ export function kindLabel(kind: string): string {
 export function syncStatusLabel(status: string): string {
   switch (status) {
     case 'local':
-      return '仅本机'
+      return t('format.sync.local')
     case 'synced':
-      return '已同步'
+      return t('format.sync.synced')
     case 'modified':
-      return '待同步'
+      return t('format.sync.modified')
     case 'archived':
-      return '已归档'
+      return t('format.sync.archived')
     case 'remote':
-      return '其他设备'
+      return t('format.sync.remote')
     default:
       return status
   }
@@ -182,6 +208,6 @@ export function describeFilter(filter: {
   if (filter.projectPath) parts.push(baseName(filter.projectPath) || filter.projectPath)
   if (filter.source) parts.push(sourceLabel(filter.source))
   if (filter.from || filter.to) parts.push(`${filter.from ?? ''}~${filter.to ?? ''}`)
-  if (filter.onlyArchived) parts.push('已归档')
-  return parts.length === 0 ? '全部会话' : parts.join(' · ')
+  if (filter.onlyArchived) parts.push(t('format.archived'))
+  return parts.length === 0 ? t('format.allChats') : parts.join(' · ')
 }

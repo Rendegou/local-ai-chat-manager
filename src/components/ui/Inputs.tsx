@@ -18,6 +18,7 @@ import {
   type ReactNode,
 } from 'react'
 
+import { useT } from '../../lib/i18n'
 import { Icon } from './Icon'
 
 /** 文本输入；`onEnter` 是搜索框这类「回车即执行」场景的便捷属性。 */
@@ -82,6 +83,12 @@ export interface SelectOption {
  *
  * 焦点始终留在触发器上，用 aria-activedescendant 指向高亮项（combobox 模式）：
  * ↑/↓ 移动、Enter/Space 选中、Esc 关闭并回到触发器。
+ *
+ * 两条契约（以前都没有）：
+ * - `value` 不在 options 中时 `selected` 必须是 `undefined` 并显示 placeholder。
+ *   旧实现用 `Math.max(0, findIndex(...))` 把 -1 抬成 0，于是「内部值是 doubao-work、
+ *   界面显示 Codex」——用户看到的来源和真正写入的来源不是同一个（DESIGN_AUDIT §3）。
+ * - options 为空时禁用触发器并说明「无可用选项」，而不是渲染一个点不开的空框。
  */
 export function Select({
   value,
@@ -90,6 +97,7 @@ export function Select({
   className = '',
   disabled,
   id,
+  placeholder,
   'aria-label': ariaLabel,
   'aria-describedby': ariaDescribedBy,
   'aria-invalid': ariaInvalid,
@@ -100,22 +108,27 @@ export function Select({
   className?: string
   disabled?: boolean
   id?: string
+  /** 当前值不在 options 中时显示的提示文本 */
+  placeholder?: string
   'aria-label'?: string
   'aria-describedby'?: string
   'aria-invalid'?: boolean
 }) {
+  const t = useT()
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
   const listId = useId()
 
-  const selectedIndex = Math.max(0, options.findIndex((option) => option.value === value))
-  const selected = options[selectedIndex]
+  const selectedIndex = options.findIndex((option) => option.value === value)
+  const selected = selectedIndex >= 0 ? options[selectedIndex] : undefined
+  const empty = options.length === 0
+  const locked = disabled || empty
 
-  // 打开时高亮当前选中项，并滚进可视区
+  // 打开时高亮当前选中项（没有选中项就落在第一项），并滚进可视区
   useEffect(() => {
     if (!open) return
-    setActive(selectedIndex)
+    setActive(selectedIndex >= 0 ? selectedIndex : 0)
     requestAnimationFrame(() => {
       containerRef.current
         ?.querySelector('[role="option"][aria-selected="true"]')
@@ -140,7 +153,7 @@ export function Select({
   }
 
   const onKeyDown = (event: ReactKeyboardEvent) => {
-    if (disabled) return
+    if (locked) return
     if (!open) {
       if (['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(event.key)) {
         event.preventDefault()
@@ -180,23 +193,33 @@ export function Select({
     }
   }
 
+  const label = empty ? t('common.noOptions') : (selected?.label ?? placeholder ?? t('common.notSelected'))
+
   return (
     <div ref={containerRef} className={`relative ${className}`}>
       <button
         type="button"
         id={id}
-        disabled={disabled}
+        role="combobox"
+        disabled={locked}
         aria-label={ariaLabel}
         aria-describedby={ariaDescribedBy}
         aria-invalid={ariaInvalid || undefined}
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-controls={open ? listId : undefined}
         aria-activedescendant={open ? `${listId}-${active}` : undefined}
+        data-empty={selected ? undefined : 'true'}
         onClick={() => setOpen((value) => !value)}
         onKeyDown={onKeyDown}
         className="field flex h-9 w-full items-center justify-between gap-2 px-3 text-left text-body text-ink"
       >
-        <span className="min-w-0 flex-1 truncate">{selected?.label ?? ''}</span>
+        <span
+          className={`min-w-0 flex-1 truncate ${selected ? '' : 'text-ink-faint'}`}
+          data-select-value={value}
+        >
+          {label}
+        </span>
         <Icon
           name="chevron"
           size={12}
@@ -208,7 +231,7 @@ export function Select({
           id={listId}
           role="listbox"
           aria-label={ariaLabel}
-          className="absolute left-0 top-[calc(100%+4px)] z-30 max-h-64 min-w-full w-max max-w-72 overflow-y-auto rounded-overlay border border-line bg-overlay py-1 shadow-overlay animate-pop"
+          className="absolute left-0 top-[calc(100%+4px)] z-30 max-h-64 min-w-full w-max max-w-72 overflow-y-auto rounded-panel border border-line bg-overlay py-1 shadow-overlay animate-pop"
         >
           {options.map((option, index) => {
             const isSelected = index === selectedIndex
@@ -249,6 +272,9 @@ export function Select({
  *
  * 开/关同时由「拨杆位置 + 轨道颜色」表达（不只靠颜色）；
  * 滑移动效 140ms，`prefers-reduced-motion` 下由全局规则压成瞬时。
+ *
+ * `bare` 用于紧凑列表行（例如设置页的来源行）：只渲染拨杆，
+ * `label` 仍然作为无障碍名称，不再重复显示一次来源名。
  */
 export function Toggle({
   checked,
@@ -256,37 +282,48 @@ export function Toggle({
   label,
   description,
   disabled,
+  bare = false,
 }: {
   checked: boolean
   onChange: (checked: boolean) => void
   label: string
   description?: ReactNode
   disabled?: boolean
+  bare?: boolean
 }) {
+  const control = (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={(event) => {
+        // 阻止 label 的默认转发（点击开关本身不应再触发一次 label 点击）
+        if (!bare) event.preventDefault()
+        onChange(!checked)
+      }}
+      className={`${bare ? '' : 'mt-0.5'} inline-flex h-[18px] w-[32px] shrink-0 items-center rounded-full px-[2px] transition-colors duration-150 ${
+        checked ? 'toggle-track-on justify-end' : 'justify-start bg-line-strong/70'
+      }`}
+    >
+      <span
+        aria-hidden="true"
+        className="block h-[14px] w-[14px] rounded-full bg-white ring-1 ring-black/15 transition-transform duration-150"
+      />
+    </button>
+  )
+
+  if (bare) {
+    return <span className={disabled ? 'cursor-not-allowed opacity-55' : ''}>{control}</span>
+  }
+
   return (
     <label
-      className={`flex items-start gap-2.5 py-1.5 ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+      className={`flex items-start gap-2.5 py-1.5 ${disabled ? 'cursor-not-allowed opacity-55' : 'cursor-pointer'}`}
     >
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        aria-label={label}
-        disabled={disabled}
-        onClick={(event) => {
-          // 阻止 label 的默认转发（点击开关本身不应再触发一次 label 点击）
-          event.preventDefault()
-          onChange(!checked)
-        }}
-        className={`mt-0.5 inline-flex h-[18px] w-[32px] shrink-0 items-center rounded-full px-[2px] transition-colors duration-150 ${
-          checked ? 'btn-primary justify-end' : 'justify-start bg-line-strong/70'
-        }`}
-      >
-        <span
-          aria-hidden="true"
-          className="block h-[14px] w-[14px] rounded-full bg-white shadow-raised transition-transform duration-150"
-        />
-      </button>
+      {control}
       <span className="min-w-0">
         <span className="block text-body text-ink">{label}</span>
         {description ? (
@@ -320,6 +357,7 @@ export function DirectoryInput({
   'aria-describedby'?: string
   'aria-invalid'?: boolean
 }) {
+  const t = useT()
   return (
     <div className="flex items-center gap-1.5">
       <TextInput
@@ -337,7 +375,7 @@ export function DirectoryInput({
         className="field flex h-9 shrink-0 items-center gap-1.5 px-3 text-body text-ink"
       >
         <Icon name="folder" size={13} className="text-ink-muted" />
-        选择
+        {t('common.choose')}
       </button>
     </div>
   )

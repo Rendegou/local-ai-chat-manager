@@ -10,55 +10,42 @@ use serde::{Deserialize, Serialize};
 
 use super::message::NormalizedMessage;
 
-/// 第一版支持的数据源（规格 §2）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum SourceKind {
-    Codex,
-    Kimi,
-    Cursor,
-    Zcode,
-}
+/// Stable, validated source identifier. Unknown sources remain readable in snapshots.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
+#[serde(transparent)]
+pub struct SourceKind(std::borrow::Cow<'static, str>);
 
+#[allow(non_upper_case_globals)]
 impl SourceKind {
-    /// 数据库 / 目录名中的稳定标识（同时用于同步仓库 `codex/`、`kimi/` 目录）。
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            SourceKind::Codex => "codex",
-            SourceKind::Kimi => "kimi",
-            SourceKind::Cursor => "cursor",
-            SourceKind::Zcode => "zcode",
-        }
+    pub const Codex: Self = Self(std::borrow::Cow::Borrowed("codex"));
+    pub const Kimi: Self = Self(std::borrow::Cow::Borrowed("kimi"));
+    pub const Cursor: Self = Self(std::borrow::Cow::Borrowed("cursor"));
+    pub const Zcode: Self = Self(std::borrow::Cow::Borrowed("zcode"));
+    pub const Claude: Self = Self(std::borrow::Cow::Borrowed("claude"));
+    pub const Gemini: Self = Self(std::borrow::Cow::Borrowed("gemini"));
+    pub const Workbuddy: Self = Self(std::borrow::Cow::Borrowed("workbuddy"));
+    pub fn as_str(&self) -> &str { &self.0 }
+    pub fn display_name(&self) -> &str {
+        crate::adapters::registry::catalog().iter().find(|d| d.id == self.as_str())
+            .map(|d| d.display_name).unwrap_or(self.as_str())
     }
-
-    /// UI 展示名。
-    pub const fn display_name(self) -> &'static str {
-        match self {
-            SourceKind::Codex => "Codex",
-            SourceKind::Kimi => "Kimi Code",
-            SourceKind::Cursor => "Cursor",
-            SourceKind::Zcode => "ZCode",
-        }
-    }
-
-    /// 从字符串解析（未知返回 `None`，便于容错处理历史数据）。
     pub fn parse(s: &str) -> Option<Self> {
-        match s.trim().to_ascii_lowercase().as_str() {
-            "codex" => Some(SourceKind::Codex),
-            "kimi" | "kimi-code" | "kimicode" => Some(SourceKind::Kimi),
-            "cursor" => Some(SourceKind::Cursor),
-            "zcode" | "z-code" => Some(SourceKind::Zcode),
-            _ => None,
+        let s = s.trim().to_ascii_lowercase();
+        let s = match s.as_str() { "kimi-code" | "kimicode" => "kimi", "z-code" => "zcode", _ => &s };
+        if s.is_empty() || s.len() > 64 || !s.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+            || !s.as_bytes()[0].is_ascii_alphanumeric() || s.ends_with('-')
+            || matches!(s, "con" | "prn" | "aux" | "nul")
+            || (s.len() == 4 && (s.starts_with("com") || s.starts_with("lpt")) && s.as_bytes()[3].is_ascii_digit()) {
+            return None;
         }
+        Some(Self(std::borrow::Cow::Owned(s.to_string())))
     }
-
-    /// 全部数据源，用于 UI 列表与扫描循环。
-    pub const ALL: [SourceKind; 4] = [
-        SourceKind::Codex,
-        SourceKind::Kimi,
-        SourceKind::Cursor,
-        SourceKind::Zcode,
-    ];
+}
+impl<'de> Deserialize<'de> for SourceKind {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(d)?;
+        Self::parse(&s).ok_or_else(|| serde::de::Error::custom("invalid source identifier"))
+    }
 }
 
 /// 原始文件引用：参与指纹校验与「保留原始文件」快照复制。

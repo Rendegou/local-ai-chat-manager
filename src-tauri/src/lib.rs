@@ -69,6 +69,11 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::imports::source_catalog,
+            commands::imports::preview_import,
+            commands::imports::confirm_import,
+            commands::imports::cancel_import,
+            commands::imports::save_import_template,
             // 会话与索引
             commands::sessions::detect_sources,
             commands::sessions::list_sources,

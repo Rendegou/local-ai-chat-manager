@@ -7,6 +7,7 @@
  */
 import type { ReactNode } from 'react'
 
+import { useT } from '../../lib/i18n'
 import { Dot, Icon, type IconName } from './Icon'
 
 /** 语义语气。 */
@@ -78,7 +79,7 @@ export function StatusPill({
   return (
     <span
       title={title}
-      className={`inline-flex shrink-0 items-center rounded-control font-medium ${box} ${TONE_SURFACE[tone]}`}
+      className={`inline-flex shrink-0 items-center rounded-chip font-medium ${box} ${TONE_SURFACE[tone]}`}
     >
       <ToneMark tone={tone} size={size === 'sm' ? 9 : 11} />
       <span className="text-ink">{children}</span>
@@ -149,13 +150,14 @@ export function Chip({
   onRemove: () => void
   children: ReactNode
 }) {
+  const t = useT()
   return (
     <button
       type="button"
       onClick={onRemove}
-      aria-label={`移除筛选：${typeof children === 'string' ? children : ''}`}
-      title="移除此筛选"
-      className="group inline-flex h-6 shrink-0 items-center gap-1 rounded-control border border-line bg-canvas px-2 text-meta text-ink transition-colors hover:border-line-strong"
+      aria-label={t('common.removeFilterAria', { label: typeof children === 'string' ? children : '' })}
+      title={t('common.removeFilterTitle')}
+      className="group inline-flex h-6 shrink-0 items-center gap-1 rounded-chip border border-line bg-canvas px-2 text-meta text-ink transition-colors hover:border-line-strong"
     >
       {children}
       <Icon

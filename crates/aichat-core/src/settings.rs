@@ -52,10 +52,32 @@ pub enum Theme {
     Dark,
 }
 
+/// 界面语言偏好。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+#[derive(Default)]
+pub enum Language {
+    /// 跟随系统（前端按 navigator.language 判断）
+    #[default]
+    System,
+    /// 中文
+    Zh,
+    /// English
+    En,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct SourceConfig { pub enabled: bool, pub path: Option<String> }
+impl Default for SourceConfig {
+    fn default() -> Self { Self { enabled: true, path: None } }
+}
+
 /// 应用设置。字段名以 camelCase 序列化，前端可直接使用。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct AppSettings {
+    pub sources: std::collections::BTreeMap<String, SourceConfig>,
     /// Codex 数据目录手工覆盖（为空则自动探测，规格 §6）
     pub codex_path: Option<String>,
     /// Kimi Code 数据目录手工覆盖
@@ -82,6 +104,8 @@ pub struct AppSettings {
     pub watch_enabled: bool,
     /// 主题
     pub theme: Theme,
+    /// 界面语言（默认跟随系统）
+    pub language: Language,
     /// 单次扫描最多解析的会话数（保护首次全量扫描时的资源占用；0 表示不限制）
     pub scan_batch_limit: usize,
     /// 会话列表中是否显示已归档会话
@@ -91,6 +115,7 @@ pub struct AppSettings {
 impl Default for AppSettings {
     fn default() -> Self {
         AppSettings {
+            sources: Default::default(),
             codex_path: None,
             kimi_path: None,
             cursor_path: None,
@@ -104,6 +129,7 @@ impl Default for AppSettings {
             auto_scan_on_start: true,
             watch_enabled: true,
             theme: Theme::System,
+            language: Language::System,
             // 首批扫描 2000 个会话，避免第一次打开超大数据集时长时间占用磁盘
             scan_batch_limit: 2000,
             show_archived: false,
@@ -112,6 +138,20 @@ impl Default for AppSettings {
 }
 
 impl AppSettings {
+    pub fn migrate_sources(&mut self) {
+        for (id, path) in [("codex", &self.codex_path), ("kimi", &self.kimi_path), ("cursor", &self.cursor_path), ("zcode", &self.zcode_path)] {
+            self.sources.entry(id.into()).or_insert_with(|| SourceConfig { enabled: true, path: path.clone() });
+        }
+    }
+    pub fn source_enabled(&self, id: &str) -> bool {
+        self.sources.get(id).map(|s| s.enabled).unwrap_or(true)
+    }
+    pub fn source_root(&self, id: &str) -> Option<PathBuf> {
+        let path = if let Some(config) = self.sources.get(id) { config.path.as_deref() } else {
+            match id { "codex" => self.codex_path.as_deref(), "kimi" => self.kimi_path.as_deref(), "cursor" => self.cursor_path.as_deref(), "zcode" => self.zcode_path.as_deref(), _ => None }
+        };
+        path.filter(|s| !s.trim().is_empty()).map(paths::expand_home)
+    }
     /// 从数据目录加载设置（不存在则返回默认值）。
     pub fn load(data_dir: &Path) -> Result<Self> {
         let path = Self::file_path(data_dir);
@@ -120,7 +160,7 @@ impl AppSettings {
         }
         let raw = std::fs::read_to_string(&path).map_err(|e| Error::io(&path, e))?;
         match serde_json::from_str::<AppSettings>(&raw) {
-            Ok(s) => Ok(s),
+            Ok(mut s) => { s.migrate_sources(); Ok(s) },
             Err(e) => {
                 // 设置文件损坏不应导致应用无法启动：退回默认值并给出提示
                 tracing::warn!(error = %e, "settings.json 解析失败，使用默认设置");
@@ -156,36 +196,16 @@ impl AppSettings {
     }
 
     /// Codex 数据目录：手工配置优先。
-    pub fn codex_root(&self) -> Option<PathBuf> {
-        self.codex_path
-            .as_deref()
-            .map(paths::expand_home)
-            .filter(|p| !p.as_os_str().is_empty())
-    }
+    pub fn codex_root(&self) -> Option<PathBuf> { self.source_root("codex") }
 
     /// Kimi 数据目录：手工配置优先。
-    pub fn kimi_root(&self) -> Option<PathBuf> {
-        self.kimi_path
-            .as_deref()
-            .map(paths::expand_home)
-            .filter(|p| !p.as_os_str().is_empty())
-    }
+    pub fn kimi_root(&self) -> Option<PathBuf> { self.source_root("kimi") }
 
     /// Cursor 数据目录：手工配置优先。
-    pub fn cursor_root(&self) -> Option<PathBuf> {
-        self.cursor_path
-            .as_deref()
-            .map(paths::expand_home)
-            .filter(|p| !p.as_os_str().is_empty())
-    }
+    pub fn cursor_root(&self) -> Option<PathBuf> { self.source_root("cursor") }
 
     /// ZCode 会话目录：手工配置优先。
-    pub fn zcode_root(&self) -> Option<PathBuf> {
-        self.zcode_path
-            .as_deref()
-            .map(paths::expand_home)
-            .filter(|p| !p.as_os_str().is_empty())
-    }
+    pub fn zcode_root(&self) -> Option<PathBuf> { self.source_root("zcode") }
 
     /// 同步仓库目录。
     pub fn repo_root(&self) -> Option<PathBuf> {
@@ -197,6 +217,7 @@ impl AppSettings {
 
     /// 校验设置：同步仓库不得指向 AI 工具自己的数据目录（规格 §4.3）。
     pub fn validate(&self) -> Result<()> {
+        for id in self.sources.keys() { if crate::model::SourceKind::parse(id).is_none() { return Err(Error::config("数据源标识无效")); } }
         if let Some(repo) = self.repo_root() {
             for (label, root) in [
                 ("Codex", paths::default_codex_root()),
