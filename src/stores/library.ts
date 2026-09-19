@@ -23,6 +23,9 @@ import type {
 /** 页面（规格 §19：Conversations / Search / Sync / Settings）。 */
 export type PageKey = 'conversations' | 'search' | 'sync' | 'settings'
 
+/** 设置页分区（顺序即左侧导航顺序，与 SettingsPage 的 SECTIONS 一致）。 */
+export type SettingsSection = 'sources' | 'sync' | 'scan' | 'appearance' | 'diagnostics'
+
 interface LibraryState {
   // ---- 主题 ----
   theme: 'system' | 'light' | 'dark'
@@ -44,6 +47,11 @@ interface LibraryState {
   settingsDirty: boolean
   /** 因未保存草稿而被拦下的目标页面 */
   pendingPage: PageKey | null
+  /**
+   * 设置页当前分区。放在 store 而不是页面的 useState 里，有两个理由：
+   * 标题栏的「界面语言」快捷项要能直接跳到外观分区；而且换页回来还能停在上次看的分区。
+   */
+  settingsSection: SettingsSection
 
   // ---- 设置与数据源 ----
   settings: AppSettings | null
@@ -88,6 +96,17 @@ interface LibraryState {
   confirmLeaveSettings: () => void
   /** 取消跳转 */
   cancelLeaveSettings: () => void
+  setSettingsSection: (section: SettingsSection) => void
+  /**
+   * 修改外观偏好（主题 / 语言）并**立即落盘**。
+   *
+   * 为什么不走「草稿 + 保存」：这两个字段在选择时就立刻生效（用户看得见），
+   * 却又被算进「未保存的修改」，于是离开设置页会被拦下问「要保存吗」，
+   * 点「放弃修改」语言还会翻回去——即时生效的偏好不该受保存语义约束。
+   *
+   * 只提交外观字段：其余草稿字段原样保留，不会顺手把用户没想保存的改动写盘。
+   */
+  setAppearance: (patch: Partial<Pick<AppSettings, 'theme' | 'language'>>) => Promise<void>
   setTheme: (theme: 'system' | 'light' | 'dark') => void
   setError: (error: ipc.IpcError | null) => void
   bootstrap: () => Promise<void>
@@ -130,6 +149,7 @@ export const useLibrary = create<LibraryState>((set, get) => ({
   settingsDraft: null,
   settingsDirty: false,
   pendingPage: null,
+  settingsSection: 'sources',
   settings: null,
   sources: [],
   sourceCatalog: [],
@@ -158,13 +178,8 @@ export const useLibrary = create<LibraryState>((set, get) => ({
     // 与已保存设置逐字段比较，决定是否标记「未保存」
     const saved = get().settings
     const dirty = saved ? JSON.stringify(next) !== JSON.stringify(saved) : true
-    // 主题与语言是外观偏好，选择时立即预览；保存仍由设置页显式完成。
-    set({
-      settingsDraft: next,
-      settingsDirty: dirty,
-      ...(patch.theme ? { theme: patch.theme } : {}),
-      ...(patch.language ? { language: patch.language } : {}),
-    })
+    // 主题与语言不在这里处理：它们是即时生效并立即落盘的偏好，走 setAppearance。
+    set({ settingsDraft: next, settingsDirty: dirty })
   },
 
   saveSettingsDraft: async () => {
@@ -209,6 +224,27 @@ export const useLibrary = create<LibraryState>((set, get) => ({
   },
 
   cancelLeaveSettings: () => set({ pendingPage: null }),
+
+  setSettingsSection: (settingsSection) => set({ settingsSection }),
+
+  setAppearance: async (patch) => {
+    const { settings, settingsDraft } = get()
+    if (!settings) return
+    try {
+      // 只把外观字段并进「已保存」的那份设置；其它草稿改动原样留在草稿里
+      const saved = await ipc.saveSettings({ ...settings, ...patch })
+      const draft = settingsDraft ? { ...settingsDraft, ...patch } : null
+      set({
+        settings: saved,
+        theme: saved.theme,
+        language: saved.language,
+        settingsDraft: draft,
+        settingsDirty: draft ? JSON.stringify(draft) !== JSON.stringify(saved) : false,
+      })
+    } catch (error) {
+      set({ error: error as ipc.IpcError })
+    }
+  },
   setTheme: (theme) => set({ theme }),
   setError: (error) => set({ error }),
 

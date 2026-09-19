@@ -104,6 +104,10 @@ export const SOURCE_FIXTURES = {
     { id: 'gemini', displayName: 'Gemini CLI', adapterVersion: 1, access: 'native', platforms: ['windows'], description: '~/.gemini/tmp 项目历史目录', status: 'missing', enabled: true, notes: null },
     { id: 'workbuddy', displayName: 'WorkBuddy', adapterVersion: 1, access: 'native', platforms: ['windows'], description: 'WorkBuddy 应用数据目录；按检测结果显示正文支持程度', status: 'error', enabled: true, notes: '状态数据库被占用，无法读取' },
     { id: 'doubao-work', displayName: '豆包工作', adapterVersion: 1, access: 'import', platforms: ['windows'], description: '仅支持标准格式手动导入；自动采集待适配', status: 'missing', enabled: true, notes: null },
+    // 已识别但未适配：只在「添加来源」里出现，标注「待适配」
+    { id: 'cline', displayName: 'Cline', adapterVersion: 1, access: 'pending', platforms: ['windows'], description: '尚未适配。常见位置：VS Code globalStorage 的 saoudrizwan.claude-dev/tasks（未在本机验证）', status: 'missing', enabled: true, notes: null },
+    { id: 'continue', displayName: 'Continue.dev', adapterVersion: 1, access: 'pending', platforms: ['windows'], description: '尚未适配。常见位置：~/.continue/sessions（未在本机验证）', status: 'missing', enabled: true, notes: null },
+    { id: 'aider', displayName: 'Aider', adapterVersion: 1, access: 'pending', platforms: ['windows'], description: '尚未适配。常见位置：项目目录下的 .aider.chat.history.md（未在本机验证）', status: 'missing', enabled: true, notes: null },
   ],
   /** 与 catalog 对应的设置里来源配置：claude 有手工路径（「未安装但已配置」）。 */
   settingsSources: {

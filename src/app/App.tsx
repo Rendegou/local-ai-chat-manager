@@ -155,6 +155,7 @@ export default function App() {
     pendingPage,
     confirmLeaveSettings,
     cancelLeaveSettings,
+    setAppearance,
   } = useLibrary()
   const syncStatus = useSync((state) => state.status)
   const sourceViews = useSourceViews()
@@ -297,7 +298,9 @@ export default function App() {
             </span>
           </IconButton>
 
-          {/* 「设置」不再出现在这里：Rail 已经是一级入口，重复入口只会让人犹豫 */}
+          {/* 「设置」不再出现在这里：Rail 已经是一级入口，重复入口只会让人犹豫。
+              但主题与语言是「改完立刻见效」的偏好，埋在设置第 4 个分区里太深，
+              所以在这里给它们一个随时可达的内联入口（走 setAppearance，立即落盘）。 */}
           <Menu
             items={[
               { label: t('menu.scanNow'), onClick: () => void scan(false), hint: t('menu.scanNowHint') },
@@ -309,6 +312,24 @@ export default function App() {
                     if (dir) void import('@tauri-apps/plugin-opener').then((m) => m.openPath(dir))
                   })
                 },
+              },
+              {
+                label: t('menu.language'),
+                current: language,
+                choices: [
+                  { value: 'system', label: t('settings.languageSystem'), onSelect: () => void setAppearance({ language: 'system' }) },
+                  { value: 'zh', label: t('settings.languageZh'), onSelect: () => void setAppearance({ language: 'zh' }) },
+                  { value: 'en', label: t('settings.languageEn'), onSelect: () => void setAppearance({ language: 'en' }) },
+                ],
+              },
+              {
+                label: t('menu.theme'),
+                current: theme,
+                choices: [
+                  { value: 'system', label: t('settings.themeSystem'), onSelect: () => void setAppearance({ theme: 'system' }) },
+                  { value: 'light', label: t('settings.themeLight'), onSelect: () => void setAppearance({ theme: 'light' }) },
+                  { value: 'dark', label: t('settings.themeDark'), onSelect: () => void setAppearance({ theme: 'dark' }) },
+                ],
               },
             ]}
           />

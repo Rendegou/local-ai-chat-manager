@@ -56,6 +56,8 @@ export const zh = {
     rebuildIndex: '重建索引',
     rebuildIndexHint: '全量',
     openDataDir: '打开数据目录',
+    language: '界面语言',
+    theme: '主题',
   },
   sidebar: {
     title: '来源与项目',
@@ -313,6 +315,7 @@ export const zh = {
     archiveDaysHint: '超过该天数未更新的会话可批量归档',
     scanLimit: '单轮扫描上限',
     scanLimitHint: '保护首次打开超大历史时的资源占用；0 表示不限制，剩余会话下次继续',
+    appearanceImmediate: '主题与语言即时生效，不需要点保存。',
     appearanceTitle: '外观与行为',
     appearanceDesc: '监听与自动扫描都只影响索引，不改动原始文件',
     keepRaw: '额外保留原始会话副本',

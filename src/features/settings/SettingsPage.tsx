@@ -59,9 +59,12 @@ export function SettingsPage() {
     resetSettingsDraft,
     scan,
     scanning,
+    settingsSection: section,
+    setSettingsSection,
+    setAppearance,
   } = useLibrary()
   const views = useSourceViews()
-  const [section, setSection] = useState<SectionKey>('sources')
+  const setSection = (key: SectionKey) => setSettingsSection(key)
   const [dataPath, setDataPath] = useState('')
   const [machine, setMachine] = useState('')
   const [saving, setSaving] = useState(false)
@@ -360,12 +363,15 @@ export function SettingsPage() {
                   checked={draft.showArchived}
                   onChange={(value) => patch({ showArchived: value })}
                 />
+                {/* 主题与语言即时生效并立即落盘：不进入「草稿 + 保存」流程，
+                    否则会出现「界面已经变了，却被告知有未保存修改」的矛盾。 */}
+                <p className="text-meta text-ink-muted">{t('settings.appearanceImmediate')}</p>
                 <FormField label={t('settings.theme')}>
                   {(props) => (
                     <Select
                       {...props}
                       value={draft.theme}
-                      onChange={(value) => patch({ theme: value as 'system' | 'light' | 'dark' })}
+                      onChange={(value) => void setAppearance({ theme: value as 'system' | 'light' | 'dark' })}
                       options={[
                         { value: 'system', label: t('settings.themeSystem') },
                         { value: 'light', label: t('settings.themeLight') },
@@ -379,7 +385,7 @@ export function SettingsPage() {
                     <Select
                       {...props}
                       value={draft.language}
-                      onChange={(value) => patch({ language: value as 'system' | 'zh' | 'en' })}
+                      onChange={(value) => void setAppearance({ language: value as 'system' | 'zh' | 'en' })}
                       options={[
                         { value: 'system', label: t('settings.languageSystem') },
                         { value: 'zh', label: t('settings.languageZh') },

@@ -10,15 +10,32 @@ import { t, useT } from '../../lib/i18n'
 import { IconButton } from './Button'
 import { Icon } from './Icon'
 
+/** 菜单项内联的一组互斥选项（语言 / 主题这类二三项选择）。 */
+export interface MenuChoice {
+  label: string
+  value: string
+  onSelect: () => void
+}
+
 /** 菜单项。 */
 export interface MenuItem {
   label: string
-  onClick: () => void
+  /** 有 `choices` 时不需要（那一项本身不是可点命令，而是一组选项） */
+  onClick?: () => void
   /** 危险操作（如重建索引）单独标注 */
   tone?: 'default' | 'danger'
   disabled?: boolean
   /** 右侧补充说明 */
   hint?: string
+  /**
+   * 内联选项：渲染成一排 `menuitemradio`，而不是一条可点命令。
+   *
+   * 为什么放在菜单里而不是再开一个二级菜单：语言、主题是「改完立刻见效」的偏好，
+   * 值得一个随时可达的入口；而多一层子菜单在只有 2–3 个选项时只是多一次点击。
+   */
+  choices?: MenuChoice[]
+  /** 内联选项当前选中的值 */
+  current?: string
 }
 
 /**
@@ -38,11 +55,16 @@ export function Menu({
 }) {
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
-  const firstItemRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
 
-  // 打开时聚焦第一项，关闭时不做额外处理（焦点留在触发按钮上）
+  // 打开时聚焦菜单里的第一个可聚焦项（命令或内联选项都算），
+  // 关闭时不做额外处理（焦点留在触发按钮上）。
+  // 用查询而不是给第一项挂 ref：菜单项的顺序会变，而且内联选项项不是同一种角色。
   useEffect(() => {
-    if (open) firstItemRef.current?.focus()
+    if (!open) return
+    panelRef.current
+      ?.querySelector<HTMLElement>('[role="menuitem"], [role="menuitemradio"]')
+      ?.focus()
   }, [open])
 
   // 点击外部 / Esc 关闭
@@ -74,9 +96,10 @@ export function Menu({
       </IconButton>
       {open ? (
         <div
+          ref={panelRef}
           role="menu"
           aria-label={label}
-          className="absolute right-0 top-[calc(100%+6px)] z-30 min-w-[200px] animate-pop rounded-panel border border-line bg-overlay p-1 shadow-overlay"
+          className="absolute right-0 top-[calc(100%+6px)] z-30 min-w-[228px] animate-pop rounded-panel border border-line bg-overlay p-1 shadow-overlay"
         >
           {items.map((item, index) => (
             <div key={item.label}>
@@ -84,24 +107,56 @@ export function Menu({
               {item.tone === 'danger' && index > 0 && items[index - 1]?.tone !== 'danger' ? (
                 <div aria-hidden="true" className="mx-1 my-1 border-t border-line" />
               ) : null}
-              <button
-                ref={index === 0 ? firstItemRef : undefined}
-                type="button"
-                role="menuitem"
-                disabled={item.disabled}
-                onClick={() => {
-                  setOpen(false)
-                  item.onClick()
-                }}
-                className={`flex w-full items-center gap-3 rounded-control px-2.5 py-1.5 text-left text-ui transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
-                  item.tone === 'danger'
-                    ? 'text-danger hover:bg-danger/12'
-                    : 'text-ink hover:bg-hover'
-                }`}
-              >
-                <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                {item.hint ? <span className="text-meta text-ink-muted">{item.hint}</span> : null}
-              </button>
+              {item.choices?.length ? (
+                // 内联互斥选项：role="group" 是 role="menu" 里合法的容器，
+                // 每一项用 menuitemradio + aria-checked（菜单内单选的标准写法）
+                <div role="group" aria-label={item.label} className="px-2.5 py-1.5">
+                  <div className="pb-1 text-meta text-ink-muted">{item.label}</div>
+                  <div className="flex gap-1">
+                    {item.choices.map((choice) => {
+                      const selected = choice.value === item.current
+                      return (
+                        <button
+                          key={choice.value}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={selected}
+                          disabled={item.disabled}
+                          onClick={() => {
+                            choice.onSelect()
+                            setOpen(false)
+                          }}
+                          className={`h-6 min-w-0 flex-1 truncate rounded-chip px-1.5 text-meta transition-colors disabled:cursor-not-allowed disabled:opacity-55 ${
+                            selected
+                              ? 'bg-accent/14 font-medium text-accent'
+                              : 'text-ink-muted hover:bg-hover hover:text-ink'
+                          }`}
+                        >
+                          {choice.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={item.disabled}
+                  onClick={() => {
+                    setOpen(false)
+                    item.onClick?.()
+                  }}
+                  className={`flex w-full items-center gap-3 rounded-control px-2.5 py-1.5 text-left text-ui transition-colors disabled:cursor-not-allowed disabled:opacity-55 ${
+                    item.tone === 'danger'
+                      ? 'text-danger hover:bg-danger/12'
+                      : 'text-ink hover:bg-hover'
+                  }`}
+                >
+                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                  {item.hint ? <span className="text-meta text-ink-muted">{item.hint}</span> : null}
+                </button>
+              )}
             </div>
           ))}
         </div>

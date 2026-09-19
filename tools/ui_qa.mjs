@@ -455,6 +455,28 @@ async function main() {
       if (!addDrawer.text.includes('豆包工作')) fail('[添加来源] 抽屉里没有导入型来源「豆包工作」')
       if (addDrawer.text.includes('Codex')) fail('[添加来源] 抽屉里出现了已自动发现的 Codex')
 
+      // 已识别但未适配的工具：必须能在这里看见，而不是「找不到 = 不支持」
+      for (const name of ['Cline', 'Continue.dev', 'Aider']) {
+        if (!addDrawer.text.includes(name)) fail(`[添加来源] 待适配清单里缺少 ${name}`)
+      }
+      const pendingRows = await tab.evaluate(() => {
+        const dialog = document.querySelector('[role="dialog"]')
+        const rows = [...(dialog?.querySelectorAll('button') ?? [])]
+        return rows
+          .filter((b) => ['Cline', 'Continue.dev', 'Aider'].some((n) => (b.textContent ?? '').trim().startsWith(n)))
+          .map((b) => ({
+            name: (b.textContent ?? '').trim(),
+            // 待适配行是「不可点」的：点了不该把它当成一个可连接来源
+            hasPendingPill: (b.textContent ?? '').includes('待适配') || (b.parentElement?.textContent ?? '').includes('待适配'),
+          }))
+      })
+      if (pendingRows.length !== 3) {
+        fail(`[添加来源] 待适配行数为 ${pendingRows.length}（应为 3）`)
+      }
+      for (const row of pendingRows) {
+        if (!row.hasPendingPill) fail(`[添加来源] ${row.name} 没有标注「待适配」`)
+      }
+
       // Escape 关闭 + 焦点归还
       await tab.keyboard.press('Escape')
       await wait(400)
@@ -633,17 +655,46 @@ async function main() {
               .find((o) => o.textContent?.trim() === '浅色')
               ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
           })
-          await wait(150)
-          const darkAfterLight = await tab.evaluate(() =>
-            document.documentElement.classList.contains('dark'),
+          await wait(300)
+          const appearance = await tab.evaluate(() => ({
+            dark: document.documentElement.classList.contains('dark'),
+            dirty: (document.querySelector('main')?.textContent ?? '').includes('有未保存的修改'),
+          }))
+          if (appearance.dark) fail('[设置] 选择「浅色」后未立即生效')
+          // 关键回归：外观即时生效**并且**立即落盘，不该被算成「未保存的修改」——
+          // 否则离开设置页会被拦下，点「放弃修改」主题还会翻回去。
+          if (appearance.dirty) {
+            fail('[设置] 改主题后出现「有未保存的修改」：外观应当即时落盘，不进入草稿')
+          }
+
+          // 「还原」要覆盖在真正的草稿字段上：外观不参与草稿，用 Toggle 制造未保存状态
+          const toggled = await tab.evaluate(() => {
+            const sw = document.querySelector('main button[role="switch"]')
+            if (!sw) return null
+            const before = sw.getAttribute('aria-checked')
+            sw.click()
+            return before
+          })
+          await wait(300)
+          const afterToggle = await tab.evaluate(() =>
+            (document.querySelector('main')?.textContent ?? '').includes('有未保存的修改'),
           )
-          if (darkAfterLight) fail('[设置] 选择「浅色」后未立即预览主题')
+          if (toggled === null) fail('[设置] 找不到可切换的开关，草稿回归未执行')
+          else if (!afterToggle) fail('[设置] 切换开关后没有标记「有未保存的修改」')
           await clickByText(tab, '还原')
-          await wait(150)
-          const darkAfterReset = await tab.evaluate(() =>
-            document.documentElement.classList.contains('dark'),
-          )
-          if (!darkAfterReset) fail('[设置] 点击「还原」后没有恢复已保存主题')
+          await wait(300)
+          const afterRevert = await tab.evaluate(() => ({
+            dirty: (document.querySelector('main')?.textContent ?? '').includes('有未保存的修改'),
+            switchState: document.querySelector('main button[role="switch"]')?.getAttribute('aria-checked'),
+            dark: document.documentElement.classList.contains('dark'),
+          }))
+          if (afterRevert.dirty) fail('[设置] 点击「还原」后仍显示「有未保存的修改」')
+          if (afterRevert.switchState !== toggled) {
+            fail(`[设置] 「还原」没有把开关恢复到已保存值（${toggled} → ${afterRevert.switchState}）`)
+          }
+          if (afterRevert.dark) {
+            fail('[设置] 「还原」不该回滚已落盘的主题（外观不是草稿字段）')
+          }
         }
       }
 

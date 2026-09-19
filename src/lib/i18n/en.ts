@@ -58,6 +58,8 @@ export const en: typeof zh = {
     rebuildIndex: 'Rebuild index',
     rebuildIndexHint: 'Full',
     openDataDir: 'Open data folder',
+    language: 'Language',
+    theme: 'Theme',
   },
   sidebar: {
     title: 'Sources & projects',
@@ -315,6 +317,7 @@ export const en: typeof zh = {
     archiveDaysHint: 'Chats not updated for more than this many days can be archived in bulk',
     scanLimit: 'Per-scan batch limit',
     scanLimitHint: 'Protects resource usage when opening a very large history for the first time; 0 means unlimited, remaining chats continue next time',
+    appearanceImmediate: 'Theme and language apply immediately — no need to save.',
     appearanceTitle: 'Appearance & behavior',
     appearanceDesc: 'Watching and auto-scan only affect the index, never the original files',
     keepRaw: 'Keep extra copies of raw session files',
