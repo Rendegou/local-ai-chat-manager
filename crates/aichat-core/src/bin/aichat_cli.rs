@@ -495,15 +495,27 @@ fn bench_session(args: &[String]) -> aichat_core::Result<()> {
     } else {
         tmp.path().join("data")
     })?;
-    // 数据源只指向合成的会话根目录，避免顺带扫描开发机上的真实历史
-    let empty_codex = tmp.path().join("empty-codex");
-    std::fs::create_dir_all(&empty_codex).map_err(|e| error::Error::io(&empty_codex, e))?;
-    let settings = aichat_core::AppSettings {
+    // 数据源只保留合成的 kimi 根目录，其余来源显式停用。
+    // 停用必须同时体现在两处：设置的 enabled 标志（下面过滤适配器时用），
+    // 否则 default_adapters() 会把 Claude / Gemini / WorkBuddy 的默认目录
+    // （真实用户主目录）一起扫进来，基准结果就被开发机上的历史污染了。
+    let mut settings = aichat_core::AppSettings {
         kimi_path: Some(root.display().to_string()),
-        codex_path: Some(empty_codex.display().to_string()),
         ..Default::default()
     };
-    let adapters = aichat_core::adapters::default_adapters(None);
+    for def in aichat_core::adapters::registry::catalog() {
+        if def.id == "kimi" {
+            continue;
+        }
+        settings.sources.insert(
+            def.id.to_string(),
+            aichat_core::settings::SourceConfig { enabled: false, ..Default::default() },
+        );
+    }
+    let adapters: Vec<_> = aichat_core::adapters::default_adapters(None)
+        .into_iter()
+        .filter(|a| settings.source_enabled(a.id()))
+        .collect();
     let ctx = AdapterContext {
         settings: &settings,
         machine_id: "bench",

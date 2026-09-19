@@ -9,6 +9,9 @@ use aichat_core::storage::search::{SearchOrder, SearchQuery};
 use aichat_core::storage::sessions::SessionFilter;
 use aichat_core::{paths, AppSettings, Library};
 
+mod common;
+use common::isolate_sources;
+
 /// fixtures 根目录。
 fn fixtures() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -30,17 +33,10 @@ impl Env {
         let repo = tmp.path().join("AIChatRepo");
         let data = tmp.path().join("data");
         std::fs::create_dir_all(&repo).unwrap();
-        // 显式指向空目录：测试不应扫描开发机上的真实 Cursor / ZCode 数据
-        let empty_cursor = tmp.path().join("empty-cursor");
-        let empty_zcode = tmp.path().join("empty-zcode");
-        std::fs::create_dir_all(&empty_cursor).unwrap();
-        std::fs::create_dir_all(&empty_zcode).unwrap();
 
-        let settings = AppSettings {
+        let mut settings = AppSettings {
             kimi_path: Some(fixtures().join("kimi/normal").display().to_string()),
             codex_path: Some(fixtures().join("codex/normal").display().to_string()),
-            cursor_path: Some(empty_cursor.display().to_string()),
-            zcode_path: Some(empty_zcode.display().to_string()),
             sync_repo: Some(repo.display().to_string()),
             // 归档阈值设得很大，避免影响其他用例
             archive_after_days: 100_000,
@@ -48,6 +44,8 @@ impl Env {
             keep_raw_files: true,
             ..Default::default()
         };
+        // 只有 codex / kimi 参与本用例，其余来源停用（未显式给路径的钉到空目录）
+        isolate_sources(&mut settings, tmp.path(), &["codex", "kimi"]);
         settings.save(&data).unwrap();
 
         let library = Library::open(&data).expect("打开核心库");
@@ -361,24 +359,13 @@ fn 同步仓库会话作为第三数据源被索引() {
         .expect("写快照");
 
     // 模拟「换一台机器」：另一个数据目录 + 指向同一个仓库
-    // 数据源指向空目录，确保索引里只有来自同步仓库的会话
+    // 所有本地数据源都停用，确保索引里只有来自同步仓库的会话
     let other_data = env.repo.parent().unwrap().join("data-b");
-    let empty_kimi = env.repo.parent().unwrap().join("empty-kimi");
-    let empty_codex = env.repo.parent().unwrap().join("empty-codex");
-    let empty_cursor = env.repo.parent().unwrap().join("empty-cursor-b");
-    let empty_zcode = env.repo.parent().unwrap().join("empty-zcode-b");
-    std::fs::create_dir_all(&empty_kimi).unwrap();
-    std::fs::create_dir_all(&empty_codex).unwrap();
-    std::fs::create_dir_all(&empty_cursor).unwrap();
-    std::fs::create_dir_all(&empty_zcode).unwrap();
-    let settings = AppSettings {
+    let mut settings = AppSettings {
         sync_repo: Some(env.repo.display().to_string()),
-        kimi_path: Some(empty_kimi.display().to_string()),
-        codex_path: Some(empty_codex.display().to_string()),
-        cursor_path: Some(empty_cursor.display().to_string()),
-        zcode_path: Some(empty_zcode.display().to_string()),
         ..Default::default()
     };
+    isolate_sources(&mut settings, env.repo.parent().unwrap(), &[]);
     settings.save(&other_data).unwrap();
     let library_b = Library::open(&other_data).expect("打开第二个库");
 

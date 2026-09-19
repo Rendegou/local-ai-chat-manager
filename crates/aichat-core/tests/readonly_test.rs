@@ -4,6 +4,9 @@
 use std::path::{Path, PathBuf};
 
 use aichat_core::storage::sessions::SessionFilter;
+mod common;
+use common::isolate_sources;
+
 use aichat_core::{AppSettings, Library};
 
 /// fixtures 根目录。
@@ -88,19 +91,14 @@ fn 扫描与归档都不修改原始文件() {
 
     // ---- 扫描（解析 + 建索引）----
     let data_dir = tmp.path().join("data");
-    // 显式指向空目录：测试不应扫描开发机上的真实 Cursor / ZCode 数据
-    let empty_cursor = tmp.path().join("cursor-home");
-    let empty_zcode = tmp.path().join("zcode-home");
-    std::fs::create_dir_all(&empty_cursor).expect("创建空 Cursor 目录");
-    std::fs::create_dir_all(&empty_zcode).expect("创建空 ZCode 目录");
-    let settings = AppSettings {
+    let mut settings = AppSettings {
         kimi_path: Some(kimi_root.display().to_string()),
         codex_path: Some(codex_root.display().to_string()),
-        cursor_path: Some(empty_cursor.display().to_string()),
-        zcode_path: Some(empty_zcode.display().to_string()),
         sync_repo: Some(tmp.path().join("repo").display().to_string()),
         ..Default::default()
     };
+    // 只有 kimi / codex 参与本用例，其余来源停用
+    isolate_sources(&mut settings, tmp.path(), &["kimi", "codex"]);
     settings.save(&data_dir).expect("保存设置");
     let library = Library::open(&data_dir).expect("打开核心库");
 
@@ -170,21 +168,13 @@ fn 凭证目录不会被读取或同步() {
 
     let data_dir = tmp.path().join("data");
     let repo = tmp.path().join("repo");
-    let empty_codex = tmp.path().join("codex-home");
-    let empty_cursor = tmp.path().join("cursor-home");
-    let empty_zcode = tmp.path().join("zcode-home");
-    std::fs::create_dir_all(&empty_codex).expect("创建空 Codex 目录");
-    std::fs::create_dir_all(&empty_cursor).expect("创建空 Cursor 目录");
-    std::fs::create_dir_all(&empty_zcode).expect("创建空 ZCode 目录");
-    let settings = AppSettings {
+    let mut settings = AppSettings {
         kimi_path: Some(kimi_root.display().to_string()),
-        // 显式指向空目录：测试不应扫描开发机上的真实会话
-        codex_path: Some(empty_codex.display().to_string()),
-        cursor_path: Some(empty_cursor.display().to_string()),
-        zcode_path: Some(empty_zcode.display().to_string()),
         sync_repo: Some(repo.display().to_string()),
         ..Default::default()
     };
+    // 本用例只关心 kimi 的凭证/只读行为，其余来源停用
+    isolate_sources(&mut settings, tmp.path(), &["kimi"]);
     settings.save(&data_dir).expect("保存设置");
     let library = Library::open(&data_dir).expect("打开核心库");
     library.scan(false, &mut |_| {}).expect("扫描");

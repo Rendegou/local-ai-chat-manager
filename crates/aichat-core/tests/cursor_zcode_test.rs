@@ -11,30 +11,29 @@ use aichat_core::adapters::{
 use aichat_core::model::{MessageKind, Role, SourceKind};
 use aichat_core::{AppSettings, Library};
 
-/// 构造只保留单个数据源手工路径的设置（其余数据源指向空目录，保证测试自包含）。
+mod common;
+use common::{empty_dir, isolate_sources};
+
+/// 构造只保留 cursor / zcode 手工路径的设置（其余数据源显式停用，保证测试自包含）。
 fn settings_with(
     tmp: &Path,
     cursor_path: Option<&Path>,
     zcode_path: Option<&Path>,
 ) -> AppSettings {
-    let empty = |name: &str| {
-        let dir = tmp.join(name);
-        std::fs::create_dir_all(&dir).unwrap();
-        dir.display().to_string()
-    };
-    AppSettings {
-        codex_path: Some(empty("empty-codex")),
-        kimi_path: Some(empty("empty-kimi")),
+    let mut settings = AppSettings {
         cursor_path: Some(match cursor_path {
             Some(p) => p.display().to_string(),
-            None => empty("empty-cursor"),
+            None => empty_dir(tmp, "empty-cursor"),
         }),
         zcode_path: Some(match zcode_path {
             Some(p) => p.display().to_string(),
-            None => empty("empty-zcode"),
+            None => empty_dir(tmp, "empty-zcode"),
         }),
         ..Default::default()
-    }
+    };
+    // cursor / zcode 由调用方给出路径；codex / kimi 保留但会被钉到空目录
+    isolate_sources(&mut settings, tmp, &["codex", "kimi", "cursor", "zcode"]);
+    settings
 }
 
 // ---------------------------------------------------------------------------

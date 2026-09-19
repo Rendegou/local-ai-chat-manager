@@ -18,6 +18,9 @@ use aichat_core::sync::git::GitRepo;
 use aichat_core::sync::SyncOptions;
 use aichat_core::{AppSettings, Library};
 
+mod common;
+use common::isolate_sources;
+
 /// fixtures 根目录。
 fn fixtures() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -76,26 +79,18 @@ impl Machine {
     fn new(root: &Path, name: &str, kimi_fixture: Option<&str>, repo: Option<PathBuf>) -> Self {
         let data_dir = root.join(format!("data-{name}"));
         let empty_kimi = root.join(format!("empty-kimi-{name}"));
-        let empty_codex = root.join(format!("empty-codex-{name}"));
-        let empty_cursor = root.join(format!("empty-cursor-{name}"));
-        let empty_zcode = root.join(format!("empty-zcode-{name}"));
         std::fs::create_dir_all(&empty_kimi).unwrap();
-        std::fs::create_dir_all(&empty_codex).unwrap();
-        std::fs::create_dir_all(&empty_cursor).unwrap();
-        std::fs::create_dir_all(&empty_zcode).unwrap();
 
-        let settings = AppSettings {
+        let mut settings = AppSettings {
             kimi_path: Some(match kimi_fixture {
                 Some(fixture) => fixtures().join(fixture).display().to_string(),
                 None => empty_kimi.display().to_string(),
             }),
-            codex_path: Some(empty_codex.display().to_string()),
-            // 显式指向空目录：测试不应扫描开发机上的真实 Cursor / ZCode 数据
-            cursor_path: Some(empty_cursor.display().to_string()),
-            zcode_path: Some(empty_zcode.display().to_string()),
             sync_repo: repo.as_ref().map(|p| p.display().to_string()),
             ..Default::default()
         };
+        // 只有 kimi 参与本用例；其余来源停用，未给路径的钉到空目录
+        isolate_sources(&mut settings, root, &["kimi"]);
         settings.save(&data_dir).unwrap();
 
         let library = Library::open(&data_dir).expect("打开核心库");
