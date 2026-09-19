@@ -34,10 +34,14 @@ impl Role {
     }
 
     /// 从字符串宽松解析（大小写不敏感），无法识别时返回 `Unknown`。
+    ///
+    /// 别名的取舍：只收「几乎不可能有第二种含义」的写法。多认一个别名能少一批
+    /// 无意义的「未识别事件」（通用导入与用户自定义来源尤其明显），但把疑似工具名
+    /// （gpt / gemini 之类）也当角色会误判，所以那些留在各自适配器里处理。
     pub fn parse(s: &str) -> Self {
         match s.trim().to_ascii_lowercase().as_str() {
-            "user" => Role::User,
-            "assistant" | "model" | "ai" => Role::Assistant,
+            "user" | "human" => Role::User,
+            "assistant" | "model" | "ai" | "bot" | "agent" => Role::Assistant,
             "system" => Role::System,
             "tool" | "function" | "tool_result" => Role::Tool,
             "developer" => Role::Developer,

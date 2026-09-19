@@ -381,9 +381,9 @@ impl Library {
 
     pub fn preview_import(&self, source: &str, text: &str) -> Result<imports::ImportPreview> {
         if !self.settings().source_enabled(source) { return Err(Error::config("请先在设置中启用此数据源")); }
-        let (package,warnings) = imports::parse_input(source,text)?;
+        let (package,warnings,format) = imports::parse_input(source,text)?;
         let token = uuid::Uuid::new_v4().to_string();
-        let preview = imports::preview(&package,warnings.clone(),token.clone());
+        let preview = imports::preview(&package,warnings.clone(),token.clone(),format);
         let mut pending = self.import_previews.lock().map_err(|_| Error::config("导入状态不可用"))?;
         pending.retain(|_,(t,_,_)| t.elapsed().as_secs() < 1800);
         if pending.len() >= 8 { return Err(Error::config("待确认导入过多，请取消已有预览")); }

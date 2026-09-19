@@ -369,6 +369,7 @@ export const zh = {
     importPickSource: '请选择来源',
     importPickSession: '从左侧选择一个会话查看预览。',
     importShowMore: '显示更多（剩余 {n} 条）',
+    importDetectedFormat: '识别为：{format}',
     importPreviewSummary: '可导入 {n} 个会话，校验失败 {failed} 个。左侧选择会话，右侧预览消息。',
     importUntitled: '未命名会话',
     importAttachments: '{n} 个附件引用（不会下载）',

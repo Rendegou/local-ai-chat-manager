@@ -267,6 +267,27 @@ export const PAGE_MOCK = String.raw`
     return { hits, hasMore: false, tookMs: 4, matchQuery: terms.map((t) => '"' + t + '"').join(' ') };
   };
 
+  /**
+   * 导入的「自动识别」在 mock 里也要按真实规则判断，而不是返回一个固定字符串——
+   * 否则 QA 断言的是假象。判别顺序与 Rust 侧一致：先试整段 JSON（对象 / 数组），
+   * 失败才逐行当 JSONL。所以「两行 JSON」不会被误判成一个 messages 对象。
+   */
+  const detectImportFormat = (text) => {
+    const t = (text || '').trim();
+    const tryParse = (value) => { try { return JSON.parse(value); } catch { return undefined; } };
+    const parsed = tryParse(t);
+    if (Array.isArray(parsed)) return '顶层消息数组';
+    if (parsed && typeof parsed === 'object') {
+      return parsed.schemaVersion !== undefined ? '标准会话包（schemaVersion 1）' : 'messages 数组对象';
+    }
+    const lines = t.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    if (lines.length > 0 && lines.every((line) => tryParse(line) !== undefined)) {
+      return t.includes('"message"') && t.includes('"content"') ? 'Claude Code 转录' : 'JSONL 转录（一行一条消息）';
+    }
+    return 'Markdown 模板';
+  };
+  let importToken = 0;
+
   const sync = stateName === 'empty' ? mock.syncStatusUnset
     : stateName === 'conflict' ? mock.syncStatusConflict : mock.syncStatus;
   const emptyState = stateName === 'empty';
@@ -345,6 +366,46 @@ export const PAGE_MOCK = String.raw`
       sources: fixtures.settingsSources,
     }),
     save_settings: (a) => Object.assign({}, a.settings),
+    preview_import: (a) => {
+      importToken += 1;
+      const token = 'mock-import-' + importToken;
+      return {
+        token,
+        detectedFormat: detectImportFormat(a.text),
+        failed: 0,
+        warnings: [],
+        sessions: [{
+          source: a.source,
+          externalId: 'mock-1',
+          title: '示例会话（mock 预览）',
+          messageCount: 2,
+          partial: false,
+          messages: [
+            { role: 'user', text: '这是 mock 预览的第一条消息，用来验证预览面板的布局。', kind: 'message', timestamp: null, toolName: null, attachments: [] },
+            { role: 'assistant', text: '第二条。真实实现会解析出你贴进来的内容。', kind: 'message', timestamp: null, toolName: null, attachments: [] },
+          ],
+        }],
+      };
+    },
+    confirm_import: () => ({ success: 1, duplicates: 0, failed: 0, partial: 0, warnings: [] }),
+    cancel_import: () => null,
+    save_import_template: () => null,
+    preview_generic_source: () => ({
+      filesFound: 7,
+      sessionsSampled: 3,
+      messages: 18,
+      samples: [
+        {
+          file: 'D:/demo/myagent/2026-09-18.jsonl',
+          title: '示例会话（mock 试解析）',
+          messages: [
+            { role: 'user', kind: 'message', text: '这段文字来自 mock 的试解析结果。', timestamp: '2026-09-18T10:00:00Z' },
+            { role: 'assistant', kind: 'message', text: '真实实现会按你填的字段映射去读目录。', timestamp: '2026-09-18T10:00:05Z' },
+          ],
+        },
+      ],
+      warnings: [],
+    }),
     data_dir: () => mock.dataDir,
     machine_id: () => mock.machineId,
     'plugin:window|is_maximized': () => windowState.maximized,

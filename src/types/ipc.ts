@@ -294,6 +294,8 @@ export interface ImportPreview {
   token: string
   failed: number
   warnings: string[]
+  /** 后端识别出来的输入格式（例如「JSONL 转录（一行一条消息）」）。导入是猜测，界面要把它说出来 */
+  detectedFormat: string
   sessions: { source: string; externalId: string; title: string | null; messageCount: number; messages: ImportMessage[]; partial: boolean }[]
 }
 export interface ImportReport { success: number; duplicates: number; failed: number; partial: number; warnings: string[] }

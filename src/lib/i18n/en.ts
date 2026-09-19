@@ -371,6 +371,7 @@ export const en: typeof zh = {
     importPickSource: 'Choose a source',
     importPickSession: 'Pick a session on the left to preview it.',
     importShowMore: 'Show more ({n} left)',
+    importDetectedFormat: 'Detected: {format}',
     importPreviewSummary: '{n} chats can be imported, {failed} failed validation. Pick a chat on the left, preview messages on the right.',
     importUntitled: 'Untitled chat',
     importAttachments: '{n} attachment references (not downloaded)',

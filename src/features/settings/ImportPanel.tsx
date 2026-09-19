@@ -117,9 +117,15 @@ export function ImportPanel({
   if (preview) {
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-3">
-        <p className="shrink-0 text-body text-ink" role="status">
-          {t('settings.importPreviewSummary', { n: preview.sessions.length, failed: preview.failed })}
-        </p>
+        {/* 识别格式必须写在预览最上方：导入是猜测，用户有权在确认前知道依据是什么 */}
+        <div className="shrink-0">
+          <span className="text-meta text-ink-muted">
+            {t('settings.importDetectedFormat', { format: preview.detectedFormat })}
+          </span>
+          <p className="text-body text-ink" role="status">
+            {t('settings.importPreviewSummary', { n: preview.sessions.length, failed: preview.failed })}
+          </p>
+        </div>
 
         {/* 左：会话摘要（虚拟列表）；右：所选会话的消息（受限分页） */}
         <div className="flex min-h-[280px] flex-1 gap-3">

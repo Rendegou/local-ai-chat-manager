@@ -555,6 +555,47 @@ async function main() {
       await tab.keyboard.press('Escape')
       await wait(400)
 
+      /* ---- B3. 导入自动识别：预览必须说明「识别成了什么格式」 ---- */
+      await clickByText(tab, '导入会话')
+      await wait(500)
+      // 未选来源时「预览导入」是禁用的（上一轮修掉的静默回退），所以先选一个导入型来源
+      await tab.evaluate(() => {
+        document.querySelector('[role="dialog"] [role="combobox"]')?.click()
+      })
+      await wait(300)
+      await tab.evaluate(() => {
+        ;[...document.querySelectorAll('[role="dialog"] [role="option"]')]
+          .find((o) => (o.textContent || '').includes('豆包工作'))
+          ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      })
+      await wait(300)
+      const jsonl = [
+        '{"role":"user","content":"第一行"}',
+        '{"role":"assistant","content":"第二行"}',
+      ].join('\n')
+      await tab.evaluate((text) => {
+        const area = document.querySelector('[role="dialog"] textarea')
+        if (!(area instanceof HTMLTextAreaElement)) return
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set
+        setter.call(area, text)
+        area.dispatchEvent(new Event('input', { bubbles: true }))
+      }, jsonl)
+      await wait(200)
+      await clickByText(tab, '预览导入')
+      await wait(700)
+      const importPreview = await tab.evaluate(() => {
+        const dialog = document.querySelector('[role="dialog"]')
+        return { text: dialog?.textContent ?? '', hasFormat: /识别为：/.test(dialog?.textContent ?? '') }
+      })
+      if (!importPreview.hasFormat) {
+        fail('[导入] 预览没有显示识别出来的格式（用户在确认前无从判断我们猜的依据）')
+      }
+      if (!importPreview.text.includes('JSONL')) {
+        fail(`[导入] JSONL 输入未被识别为 JSONL 转录：${importPreview.text.slice(0, 120)}`)
+      }
+      await tab.keyboard.press('Escape')
+      await wait(400)
+
       await tab.close()
     }
 
