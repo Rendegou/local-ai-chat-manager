@@ -7,7 +7,7 @@ UI 与索引层完全看不到原始文件结构。
 
 ```rust
 trait ConversationAdapter {
-    fn id(&self) -> &'static str;
+    fn id(&self) -> &str;      // 内置实现返回字面量；用户自定义来源的 id 是运行期值
     fn detect(&self, ctx) -> Vec<DetectionResult>;      // 探测数据源
     fn scan(&self, ctx) -> Result<Vec<SessionDescriptor>>;  // 只收集路径，不读内容
     fn parse_streaming(&self, ctx, descriptor, sink) -> Result<ParsedSessionInfo>; // 流式解析
@@ -195,6 +195,82 @@ rollout 的行结构（顶层统一为 `{timestamp, ordinal, type, payload}`）�
 - 会话主键与本机一致（`source:machine:external`），因此**本机的同一会话不会重复索引**：
   扫描时以本地文件为权威来源，仓库副本只服务其他机器；
 - 其他机器的会话标记 `sync_status = remote`，UI 中可区分「本机 / 其他设备」。
+
+---
+
+## 用户自定义来源（GenericJsonAdapter）
+
+**这是「满足所有人」的答案里最实在的一块。** 给每个 AI 编程工具写一个 Rust 适配器追不上生态：
+新工具出现的速度远快于写 parser 的速度。而这类工具几乎都把历史写成 `~/.xxx/` 下的 JSONL 或 JSON，
+所以真正需要的不是更多适配器，而是一个**不需要写代码**的通用读取器 + 一份可验证的字段映射。
+
+`crates/aichat-core/src/adapters/generic.rs`，一个用户配置的来源对应一个实例。
+
+### 字段映射（`FieldMapping`，存在 `settings.sources[id].mapping`）
+
+| 字段 | 默认 | 说明 |
+| --- | --- | --- |
+| `layout` | `jsonl` | `jsonl` 一行一条消息；`json` 一个文件一个会话对象 |
+| `messagesPath` | `messages` | 仅 `json` 布局：消息数组路径，`.` 分隔（如 `data.items`）；找不到时退回顶层数组 |
+| `roleField` | `role` | 角色字段，可下钻（如 `author.role`） |
+| `textField` | `content` | 正文字段；字符串 / `[{text}]` 块数组 / 嵌套对象都认 |
+| `timeField` | `timestamp` | 留空表示不读时间 |
+| `toolField` | 空 | 仅角色为 `tool` 时使用 |
+| `titleField` | 空 | `json` 从文件根对象读，`jsonl` 从第一条记录读 |
+| `projectField` | 空 | 读取位置同 `titleField` |
+| `roleMap` | 空 | 把不认识的角色名对到标准角色，如 `{bot: assistant}` |
+| `extensions` | `["jsonl"]` | 参与索引与**文件监听**的扩展名（不含点） |
+| `maxDepth` | `8` | 目录递归深度上限（1–32） |
+
+`SourceConfig` 因此多了两个字段：`displayName`（用户起的名字）与 `mapping`（有它即「自定义来源」）。
+两者都有容器级 `#[serde(default)]`，旧的 `settings.json` 照常加载。可选字段用「留空即不配置」而不是
+`Option`：表单与 serde 都更直白。
+
+### 三条设计约定
+
+1. **映射写错不能静默成功**。一条消息都读不出来时返回明确错误（指向该改哪个字段），
+   而不是建一个空会话——静默成功会让人以为接上了，扫描完才发现什么都没有，那时已经不知道错在哪。
+2. **认不出的角色不丢**。保留为 `unknown` + `event`（`note_unknown` 置 `partial`、保留 raw），
+   沿用既有约定；配合 `roleMap` 让用户自己补，而不是我们猜。
+3. **与内置来源共用增量机制**。`content_revision` 留空 → 走 `size+mtime+hash` 指纹，
+   文件变了才重解析。没有为自定义来源发明第二套逻辑。
+
+### 两个容易踩的点
+
+- `watch_extensions()` **必须覆写**：默认实现从静态 `registry::catalog()` 查扩展名，而自定义来源不在
+  catalog 里，会静默退回 `json/jsonl`——用户填了别的扩展名就永远收不到文件变更通知。
+- `external_id` 用文件名；同名文件分布在不同子目录时拼一段相对路径哈希，否则两个 `session.json`
+  会共用同一个会话主键、互相覆盖。
+
+### 标识冲突
+
+自定义来源**不能占用非 `pending` 的内置标识**（`AppSettings::validate()` 拒绝）：那会让两个适配器
+同 id 抢同一批会话。但 `pending` 例外——「把还没适配的工具自己接上」正是自定义来源的用途之一。
+一个原本判为 `pending` 的工具被映射接上后，`source_catalog()` 会把它的 `access` 改报为 `native`，
+界面上不再显示「待适配」。
+
+### 试解析
+
+`Library::preview_generic_mapping(root, mapping)` 采样前 3 个会话，返回文件数、会话数、消息数、
+示例正文与告警。**参数收 `root` + `mapping` 而不是读设置**：用户要在保存前反复调映射，
+不必先落盘再改再删。单个文件失败只进告警，不让整次试解析失败。
+
+---
+
+## 数据源分类（`access`）
+
+`registry::catalog()` 里 `access` 的三种取值决定一个来源在界面上能被怎么用：
+
+| access | 含义 | 有内置适配器 | 出现在「添加来源」 | 可配置 |
+| --- | --- | --- | --- | --- |
+| `native` | 有内置适配器 | 是 | 未连接时 | 目录 |
+| `import` | 只支持手动导入标准包 | 否 | 是 | 无 |
+| `pending` | 认识这个工具、知道数据大概在哪，但**还没写适配器** | 否 | 是（标「待适配」+「用自定义来源接入」） | 无 |
+
+`pending` 的用处是把「产品不支持」变成「还没做」：用户能看见我们认识这个工具，而不是在列表里
+找不到、以为永远不会有。它也是收集真实需求的地方——哪个 `pending` 条目被问得最多，下一个适配器
+就写哪个。`description` 里的路径一律标注**未在本机验证**；写成一个看起来权威的默认路径更糟，
+一旦写错用户会照着去指一个空目录。
 
 ---
 

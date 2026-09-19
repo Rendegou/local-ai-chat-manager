@@ -315,6 +315,9 @@ assertion `left == right` failed: 两个数据源各解析 1 个会话
 
 ### 8.4 下一步值得做的
 
+> 第 1 条与第 3 条已在 **0.4.0** 完成，见 [SOURCE_EXTENSIBILITY_REPORT.md](./SOURCE_EXTENSIBILITY_REPORT.md)。
+
+
 1. 按 §8.1 修掉测试隔离，让 `cargo test` 在任何机器上都能给出可信信号。
 2. 给真实后端的搜索加一个可注入延迟的测试开关，让竞态断言也能在真机上跑。
 3. 把 `tools/desktop_shot.py` 的点击脚本化成一次完整的真机回归（设置 / 搜索 / 同步 / 添加来源），

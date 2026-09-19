@@ -82,3 +82,15 @@ node tools/gallery_shot.mjs --out .ui-shots/gallery
   文字放大后能把整个文档撑宽；
 - 固定栏宽用 px（`w-[224px]`）而不是 rem（`w-56`）：仅文字放大时 rem 会翻倍，栏宽失衡；
 - 阅读区需要 `overflow-hidden` + `min-w-0`：否则其固有内容宽度会参与整页布局计算。
+
+## 真机验证（不做坐标点击）
+
+`tools/desktop_shot.py --drawer-at/--detail-at` 靠坐标，而坐标要从显示器缩放反推，算错一次就点到别的控件上。
+`tools/uia-drive.ps1` 改用 UI Automation 按**可访问名称**定位并 Invoke 按钮、给输入框赋值，
+不需要窗口在前台，也顺带验证了元素确实有可访问名称：
+
+```powershell
+# ops.txt 每行一条：invoke <按钮名> / set <输入框名> <值> / wait <毫秒>
+# 注意 ops 文件必须带 BOM（UTF-8 with BOM），否则 PowerShell 读出的中文名是乱码，表现为全部 NOT_FOUND
+pwsh -NoProfile -File tools/uia-drive.ps1 -ProcId <pid> -Log ops.txt
+```

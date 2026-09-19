@@ -23,3 +23,6 @@ app-icon.png
 
 # UI 截图基线（用 npm run ui:shots 重新生成，不入库）
 .ui-shots/
+
+# 编码代理的本地计划/草稿（工具状态，不是项目源码）
+.zcode/

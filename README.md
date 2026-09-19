@@ -4,9 +4,9 @@
 
 **中文** | [English](#english)
 
-> 当前版本：**0.3.1 Beta**。Windows 已完成主要功能验证；macOS 和 Linux 尚未进行真机测试。
+> 当前版本：**0.4.0 Beta**。Windows 已完成主要功能验证；macOS 和 Linux 尚未进行真机测试。
 >
-> Current version: **0.3.1 Beta**. Main workflows verified on Windows; macOS and Linux have not been tested on real hardware yet.
+> Current version: **0.4.0 Beta**. Main workflows verified on Windows; macOS and Linux have not been tested on real hardware yet.
 
 技术栈：Tauri 2、Rust、React、TypeScript、SQLite FTS5。
 Tech stack: Tauri 2, Rust, React, TypeScript, SQLite FTS5.
@@ -25,7 +25,11 @@ Tech stack: Tauri 2, Rust, React, TypeScript, SQLite FTS5.
 
 ### 功能
 
-- 自动发现 Codex 和 Kimi Code CLI 的本地会话（设置中还可配置 Cursor、ZCode 等更多数据源目录）
+- 内置适配 Codex / Kimi Code / Cursor / ZCode / Claude Code / Gemini CLI / WorkBuddy；
+  Cline、Continue.dev、Aider 已识别但尚未适配
+- **自定义来源**：给任意工具的 JSONL / JSON 目录填一份字段映射就能接成常驻来源，
+  带「试解析」在保存前验证映射——不需要等我们写适配器
+- 导入支持自动识别：标准会话包、OpenAI/Anthropic 消息形、JSONL 转录、Claude Code 转录、Markdown
 - 按项目、时间和数据源浏览历史记录
 - 使用 SQLite FTS5 全文搜索
 - 增量扫描，只处理新增或变化的文件
@@ -118,6 +122,7 @@ docs/                架构、同步协议、限制与路线图
 - [界面规范 Design system](docs/DESIGN.md)
 - [设计审计 Design audit](docs/DESIGN_AUDIT.md)
 - [UI 重构报告 UI refactor report](docs/UI_REFACTOR_REPORT.md)
+- [数据源可扩展性报告 Source extensibility](docs/SOURCE_EXTENSIBILITY_REPORT.md)
 - [UI 验收 UI QA](docs/UI-QA.md)
 - [路线图 Roadmap](docs/ROADMAP.md)
 
@@ -131,7 +136,12 @@ A local-first manager for AI coding CLI chat history. It organizes and searches 
 
 ### Features
 
-- Automatically discovers local Codex and Kimi Code CLI sessions (Cursor, ZCode and other data-source directories can also be configured in Settings)
+- Built-in adapters for Codex / Kimi Code / Cursor / ZCode / Claude Code / Gemini CLI / WorkBuddy;
+  Cline, Continue.dev and Aider are recognised but not adapted yet
+- **Custom sources**: point at any tool's JSONL / JSON directory, map its fields, and it becomes a
+  first-class source — with a test-parse step to verify the mapping before saving
+- Import auto-detects standard packages, OpenAI/Anthropic message shapes, JSONL transcripts,
+  Claude Code transcripts and Markdown
 - Browse history by project, time, and data source
 - Full-text search powered by SQLite FTS5
 - Incremental scanning — only new or changed files are processed
@@ -224,6 +234,7 @@ docs/                Architecture, sync protocol, limitations, and roadmap
 - [Design system](docs/DESIGN.md)
 - [Design audit](docs/DESIGN_AUDIT.md)
 - [UI refactor report](docs/UI_REFACTOR_REPORT.md)
+- [Source extensibility report](docs/SOURCE_EXTENSIBILITY_REPORT.md)
 - [UI QA](docs/UI-QA.md)
 - [Roadmap](docs/ROADMAP.md)
 
