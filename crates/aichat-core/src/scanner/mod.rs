@@ -91,7 +91,11 @@ pub fn scan(
             if !remote {
                 db.upsert_source(&SourceRow {
                     id: detection.source.as_str().to_string(),
-                    display_name: detection.source.display_name().to_string(),
+                    display_name: ctx
+                        .settings
+                        .source_display_name(detection.source.as_str())
+                        .unwrap_or_else(|| detection.source.display_name())
+                        .to_string(),
                     root_path: detection
                         .root
                         .as_ref()

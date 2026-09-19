@@ -147,9 +147,63 @@ export interface StorageStats {
   bytesOnDisk: number
 }
 
+/**
+ * 用户自定义来源的字段映射（与 Rust `FieldMapping` 对应）。
+ *
+ * 除 layout / messagesPath / roleField / textField 之外，留空即「不配置」。
+ */
+export interface FieldMapping {
+  /** 文件布局：一行一条消息，还是一个文件一个会话对象 */
+  layout: 'jsonl' | 'json'
+  /** json 布局下消息数组的路径，用 . 分隔，例如 data.items */
+  messagesPath: string
+  roleField: string
+  textField: string
+  timeField: string
+  toolField: string
+  titleField: string
+  projectField: string
+  /** 非标准角色名映射，例如 { bot: 'assistant' } */
+  roleMap: Record<string, string>
+  extensions: string[]
+  maxDepth: number
+}
+
+/** 单个来源的配置（与 Rust `SourceConfig` 对应）。 */
+export interface SourceConfig {
+  enabled: boolean
+  path: string | null
+  /** 用户自定义来源的显示名 */
+  displayName?: string | null
+  /** 存在即为「用户自定义来源」 */
+  mapping?: FieldMapping | null
+}
+
+/** 试解析里的单条消息。 */
+export interface GenericPreviewMessage {
+  role: string
+  kind: string
+  text: string
+  timestamp: string | null
+}
+/** 试解析里的单个会话摘要。 */
+export interface GenericPreviewSample {
+  file: string
+  title: string | null
+  messages: GenericPreviewMessage[]
+}
+/** 「试解析」结果：填完字段映射先看看这个目录能读出什么。 */
+export interface GenericPreview {
+  filesFound: number
+  sessionsSampled: number
+  messages: number
+  samples: GenericPreviewSample[]
+  warnings: string[]
+}
+
 /** 设置（与 Rust `AppSettings` 对应）。 */
 export interface AppSettings {
-  sources: Record<string, { enabled: boolean; path: string | null }>
+  sources: Record<string, SourceConfig>
   codexPath: string | null
   kimiPath: string | null
   cursorPath: string | null

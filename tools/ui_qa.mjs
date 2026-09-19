@@ -430,6 +430,9 @@ async function main() {
       for (const expected of ['Codex', 'Kimi Code', 'Claude Code', 'Gemini CLI', 'legacy-export']) {
         if (!settingsText.includes(expected)) fail(`[设置] 已连接来源列表缺少 ${expected}`)
       }
+      // 用户自己接进来的来源要能一眼认出是自己的
+      if (!settingsText.includes('My Agent')) fail('[设置] 已连接来源列表缺少用户自定义来源')
+      if (!settingsText.includes('自定义')) fail('[设置] 自定义来源没有「自定义」标记')
       // h1 只能有一个：设置页其它标题必须是 h2/h3
       const h2Count = await tab.evaluate(() => document.querySelectorAll('h2').length)
       note(`[设置] h1 = 1，h2 = ${h2Count}`)
@@ -477,7 +480,103 @@ async function main() {
         if (!row.hasPendingPill) fail(`[添加来源] ${row.name} 没有标注「待适配」`)
       }
 
+      /* ---- B4. 自定义来源：把「还没适配」接成可用来源的入口 ---- */
+      await tab.evaluate(() => {
+        ;[...document.querySelectorAll('[role="dialog"] button')]
+          .find((b) => b.textContent?.trim() === '用自定义来源接入')
+          ?.click()
+      })
+      await wait(500)
+      const customForm = await tab.evaluate(() => {
+        const dialog = document.querySelector('[role="dialog"]')
+        const inputs = [...(dialog?.querySelectorAll('input') ?? [])]
+        return {
+          title: (dialog?.querySelector('h2')?.textContent ?? '').trim(),
+          name: inputs[0]?.value ?? '',
+          id: inputs[1]?.value ?? '',
+          text: dialog?.textContent ?? '',
+        }
+      })
+      if (!customForm.text.includes('角色字段') || !customForm.text.includes('正文字段')) {
+        fail('[自定义来源] 表单缺少字段映射项')
+      }
+      // 从「待适配」进来时应预填显示名并派生标识，不用用户自己想 id
+      if (customForm.name !== 'Cline') fail(`[自定义来源] 显示名未预填，实际「${customForm.name}」`)
+      if (customForm.id !== 'cline') fail(`[自定义来源] 来源标识未派生，实际「${customForm.id}」`)
+      if (!customForm.text.includes('试解析')) fail('[自定义来源] 表单缺少「试解析」按钮')
+
+      // 未填目录时「试解析」「保存来源」都不可用（会读出不存在的目录）
+      const beforePath = await tab.evaluate(() => {
+        const dialog = document.querySelector('[role="dialog"]')
+        const buttons = [...(dialog?.querySelectorAll('button') ?? [])]
+        const find = (label) => buttons.find((b) => (b.textContent ?? '').trim() === label)
+        return {
+          preview: find('试解析')?.disabled ?? null,
+          save: find('保存来源')?.disabled ?? null,
+        }
+      })
+      if (beforePath.preview !== true) fail('[自定义来源] 未填目录时「试解析」应禁用')
+      if (beforePath.save !== true) fail('[自定义来源] 未填目录时「保存来源」应禁用')
+
+      // 填目录 → 试解析应返回采样结果
+      await tab.evaluate(() => {
+        const dialog = document.querySelector('[role="dialog"]')
+        const inputs = [...(dialog?.querySelectorAll('input') ?? [])]
+        const path = inputs[2]
+        if (!(path instanceof HTMLInputElement)) return
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+        setter.call(path, 'D:/demo/myagent/sessions')
+        path.dispatchEvent(new Event('input', { bubbles: true }))
+      })
+      await wait(250)
+      await tab.evaluate(() => {
+        ;[...document.querySelectorAll('[role="dialog"] button')]
+          .find((b) => b.textContent?.trim() === '试解析')
+          ?.click()
+      })
+      await wait(700)
+      const preview = await tab.evaluate(() => {
+        const dialog = document.querySelector('[role="dialog"]')
+        return { text: dialog?.textContent ?? '' }
+      })
+      if (!/采样\s*3\s*个会话/.test(preview.text) && !preview.text.includes('采样 3 个会话')) {
+        fail(`[自定义来源] 试解析没有显示采样会话数：${preview.text.slice(-160)}`)
+      }
+      if (!preview.text.includes('18 条消息')) {
+        fail('[自定义来源] 试解析没有显示消息条数')
+      }
+      if (!preview.text.includes('mock 的试解析结果')) {
+        fail('[自定义来源] 试解析没有展示示例消息内容')
+      }
+
+      // 换一个已被内置来源占用的标识：保存应被拒绝（错误提示里要点名冲突方）
+      await tab.evaluate(() => {
+        const dialog = document.querySelector('[role="dialog"]')
+        const inputs = [...(dialog?.querySelectorAll('input') ?? [])]
+        const id = inputs[1]
+        if (!(id instanceof HTMLInputElement)) return
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+        setter.call(id, 'codex')
+        id.dispatchEvent(new Event('input', { bubbles: true }))
+      })
+      await wait(250)
+      const collision = await tab.evaluate(() => {
+        const dialog = document.querySelector('[role="dialog"]')
+        const buttons = [...(dialog?.querySelectorAll('button') ?? [])]
+        return {
+          save: buttons.find((b) => (b.textContent ?? '').trim() === '保存来源')?.disabled ?? null,
+          text: dialog?.textContent ?? '',
+        }
+      })
+      if (collision.save !== true) fail('[自定义来源] 占用内置标识（codex）时「保存来源」应禁用')
+      if (!collision.text.includes('已被')) fail('[自定义来源] 没有说明标识与谁冲突')
+
+      await tab.keyboard.press('Escape')
+      await wait(400)
+
       // Escape 关闭 + 焦点归还
+      await clickByText(tab, '添加来源')
+      await wait(500)
       await tab.keyboard.press('Escape')
       await wait(400)
       const afterEscape = await tab.evaluate(() => ({

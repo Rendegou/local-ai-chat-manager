@@ -211,6 +211,12 @@ export function SettingsPage() {
                           <div className="flex min-w-0 items-center gap-2">
                             <Dot tone={statusDot(view.status)} />
                             <span className="min-w-0 truncate text-body text-ink">{view.displayName}</span>
+                            {/* 用户自己接进来的来源要能一眼看出是自己的，而不是产品内置的 */}
+                            {view.isCustom ? (
+                              <StatusPill size="sm" tone="accent">
+                                {t('settings.customBadge')}
+                              </StatusPill>
+                            ) : null}
                             <span className="shrink-0 text-meta text-ink-muted">
                               {sourceStatusLabel(view.status, view.enabled, t)}
                             </span>

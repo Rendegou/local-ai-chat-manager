@@ -159,7 +159,7 @@ impl Default for KimiAdapter {
 }
 
 impl ConversationAdapter for KimiAdapter {
-    fn id(&self) -> &'static str {
+    fn id(&self) -> &str {
         "kimi"
     }
 

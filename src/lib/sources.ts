@@ -22,7 +22,7 @@
 import { useMemo } from 'react'
 
 import { useLibrary } from '../stores/library'
-import type { AppSettings, SourceDefinition, SourceRow } from '../types/ipc'
+import type { AppSettings, SourceConfig, SourceDefinition, SourceRow } from '../types/ipc'
 
 /** 来源状态：与后端 `SourceCatalogEntry.status` 同构。 */
 export type SourceStatus = 'available' | 'missing' | 'partial' | 'error'
@@ -61,10 +61,17 @@ export interface SourceView {
   visibleInConnectedSettings: boolean
   /** 是否需要用户处理（部分解析 / 读取失败 / 手工配置但目录已消失） */
   needsAttention: boolean
+  /**
+   * 是否是用户自定义来源（设置里有字段映射）。
+   *
+   * 界面用它而不是 `access` 来决定「配置」打开哪套表单：一个原本判为 pending 的工具
+   * 被用户用字段映射接上之后，access 仍可能写着 pending，但它的配置方式已经是映射。
+   */
+  isCustom: boolean
 }
 
 /** 空设置兜底：没有 settings 时视为「未手工配置任何来源」。 */
-const NO_SETTINGS_SOURCES: Record<string, { enabled: boolean; path: string | null }> = {}
+const NO_SETTINGS_SOURCES: Record<string, SourceConfig> = {}
 
 /**
  * 合并 Catalog 与探测结果，得到统一视图。
@@ -85,6 +92,7 @@ export function buildSourceViews(
   const build = (id: string, definition: SourceDefinition | null): SourceView => {
     const row = rowById.get(id)
     const config = settingsSources[id]
+    const mapping = config?.mapping ?? null
     const configuredPath = config?.path?.trim() ? config.path.trim() : null
 
     const found = row?.found === true
@@ -96,7 +104,8 @@ export function buildSourceViews(
 
     return {
       id,
-      displayName: definition?.displayName ?? row?.displayName ?? id,
+      // 用户自己起的名字优先；内置来源由 catalog 决定，故自定义来源不会撞车
+      displayName: config?.displayName?.trim() || definition?.displayName || row?.displayName || id,
       access: definition?.access ?? 'native',
       status,
       enabled: config?.enabled ?? definition?.enabled ?? true,
@@ -114,6 +123,7 @@ export function buildSourceViews(
       visibleInConnectedSettings:
         found || configured || hasHistory || status === 'partial' || status === 'error',
       needsAttention,
+      isCustom: mapping != null,
     }
   }
 

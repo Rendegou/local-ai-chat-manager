@@ -63,7 +63,7 @@ impl Default for ZcodeAdapter {
 }
 
 impl ConversationAdapter for ZcodeAdapter {
-    fn id(&self) -> &'static str {
+    fn id(&self) -> &str {
         "zcode"
     }
 

@@ -11,6 +11,7 @@ pub mod workbuddy;
 pub mod codex;
 pub mod cursor;
 pub mod kimi;
+pub mod generic;
 pub mod repo;
 pub mod zcode;
 
@@ -26,6 +27,7 @@ use crate::settings::AppSettings;
 pub use codex::CodexAdapter;
 pub use cursor::CursorAdapter;
 pub use kimi::KimiAdapter;
+pub use generic::GenericJsonAdapter;
 pub use repo::SyncRepoAdapter;
 pub use zcode::ZcodeAdapter;
 
@@ -91,8 +93,11 @@ impl MessageSink for VecSink {
 
 /// 会话适配器：每种数据源一个实现。
 pub trait ConversationAdapter: Send + Sync {
-    /// 适配器标识（日志与设置页使用）。
-    fn id(&self) -> &'static str;
+    /// 适配器标识（日志、设置与 sources 表使用）。
+    ///
+    /// 返回借用而不是 ：用户自定义来源的 id 是运行期才知道的，
+    /// 内置实现返回字符串字面量依然满足这个签名，所以放宽不影响它们。
+    fn id(&self) -> &str;
 
     fn watch_extensions(&self) -> Vec<String> {
         registry::catalog().iter().find(|s| s.id == self.id())

@@ -66,11 +66,123 @@ pub enum Language {
     En,
 }
 
+/// 用户自定义数据源的字段映射：把任意 JSONL / JSON 翻译成会话。
+///
+/// 存在的理由是「满足所有人」：给每个工具写一个 Rust 适配器追不上生态，
+/// 而这类工具几乎都往 `~/.xxx/` 写 JSONL 或 JSON。与其等我们写适配器，
+/// 不如让用户自己填一份映射——**不需要写代码**。
+///
+/// 映射填错不会静默成功：解析出 0 条消息时适配器返回明确错误，
+/// 而且界面上的「试解析」能在保存前就告诉你这个目录能读出什么。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct FieldMapping {
+    /// 文件布局：`jsonl`（一行一条消息）或 `json`（一个文件一个会话对象）
+    pub layout: String,
+    /// `json` 布局下消息数组的路径，用 `.` 分隔，例如 `data.items`
+    pub messages_path: String,
+    /// 角色字段（相对每条消息），例如 `role` / `author.role` / `type`
+    pub role_field: String,
+    /// 正文字段，例如 `content` / `text`
+    pub text_field: String,
+    /// 时间字段。留空表示不读时间。
+    pub time_field: String,
+    /// 工具名字段（仅角色为 `tool` 时使用）。留空表示不读。
+    pub tool_field: String,
+    /// 标题字段。`json` 布局从文件根对象读，`jsonl` 布局从第一条记录读。
+    pub title_field: String,
+    /// 项目路径字段。读取位置同 `title_field`。
+    pub project_field: String,
+    /// 非标准角色名的映射，例如 `{"bot": "assistant", "human": "user"}`
+    pub role_map: std::collections::BTreeMap<String, String>,
+    /// 参与索引的文件扩展名（不含点）
+    pub extensions: Vec<String>,
+    /// 目录递归深度上限
+    pub max_depth: usize,
+}
+
+impl Default for FieldMapping {
+    fn default() -> Self {
+        FieldMapping {
+            layout: "jsonl".to_string(),
+            messages_path: "messages".to_string(),
+            role_field: "role".to_string(),
+            text_field: "content".to_string(),
+            // timestamp 是最常见的键名。文件里没有它只是读不到时间，不影响消息本身，
+            // 所以给一个有用的默认值比留空更合适（试解析里能立刻看出时间没读上）。
+            time_field: "timestamp".to_string(),
+            tool_field: String::new(),
+            title_field: String::new(),
+            project_field: String::new(),
+            role_map: Default::default(),
+            extensions: vec!["jsonl".to_string()],
+            max_depth: 8,
+        }
+    }
+}
+
+impl FieldMapping {
+    /// 是否为「一行一条消息」布局。
+    pub fn is_jsonl(&self) -> bool {
+        !self.layout.eq_ignore_ascii_case("json")
+    }
+
+    /// 校验并给出人话错误（保存设置时调用）。
+    ///
+    /// 这里刻意严格：一份写错的映射会让用户以为「已经接上了」，
+    /// 结果扫描完什么都没有。能在保存时发现的问题不要留到扫描之后。
+    pub fn validate(&self) -> Result<()> {
+        if !matches!(self.layout.as_str(), "jsonl" | "json") {
+            return Err(Error::config("自定义来源的布局必须是 jsonl 或 json"));
+        }
+        for (label, value) in [
+            ("消息数组路径", &self.messages_path),
+            ("角色字段", &self.role_field),
+            ("正文字段", &self.text_field),
+        ] {
+            if value.trim().is_empty() {
+                return Err(Error::config(format!("自定义来源的{label}不能为空")));
+            }
+            if value.contains("..") || value.starts_with('.') || value.ends_with('.') {
+                return Err(Error::config(format!("自定义来源的{label}路径格式不正确：{value}")));
+            }
+        }
+        if self.extensions.is_empty() {
+            return Err(Error::config("自定义来源至少要指定一个文件扩展名"));
+        }
+        for ext in &self.extensions {
+            let clean = ext.trim().trim_start_matches('.');
+            if clean.is_empty() || clean.len() > 12 || !clean.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_') {
+                return Err(Error::config(format!("文件扩展名不合法：{ext}")));
+            }
+        }
+        if self.max_depth == 0 || self.max_depth > 32 {
+            return Err(Error::config("自定义来源的目录深度须为 1–32"));
+        }
+        for (from, to) in &self.role_map {
+            if from.trim().is_empty() {
+                return Err(Error::config("角色映射里的原名不能为空"));
+            }
+            if crate::model::Role::parse(to) == crate::model::Role::Unknown {
+                return Err(Error::config(format!("角色映射的目标无法识别：{to}")));
+            }
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
-pub struct SourceConfig { pub enabled: bool, pub path: Option<String> }
+pub struct SourceConfig {
+    pub enabled: bool,
+    pub path: Option<String>,
+    /// 用户自定义来源的显示名（缺省时用 id）
+    pub display_name: Option<String>,
+    /// 存在即为「用户自定义来源」：由 GenericJsonAdapter 按这份映射读取 `path` 目录
+    pub mapping: Option<FieldMapping>,
+}
 impl Default for SourceConfig {
-    fn default() -> Self { Self { enabled: true, path: None } }
+    fn default() -> Self { Self { enabled: true, path: None, display_name: None, mapping: None } }
 }
 
 /// 应用设置。字段名以 camelCase 序列化，前端可直接使用。
@@ -140,11 +252,28 @@ impl Default for AppSettings {
 impl AppSettings {
     pub fn migrate_sources(&mut self) {
         for (id, path) in [("codex", &self.codex_path), ("kimi", &self.kimi_path), ("cursor", &self.cursor_path), ("zcode", &self.zcode_path)] {
-            self.sources.entry(id.into()).or_insert_with(|| SourceConfig { enabled: true, path: path.clone() });
+            self.sources
+                .entry(id.into())
+                .or_insert_with(|| SourceConfig { enabled: true, path: path.clone(), ..Default::default() });
         }
     }
     pub fn source_enabled(&self, id: &str) -> bool {
         self.sources.get(id).map(|s| s.enabled).unwrap_or(true)
+    }
+    /// 用户给某个来源起的显示名（自定义来源用；内置来源返回 None，由 catalog 决定）。
+    pub fn source_display_name(&self, id: &str) -> Option<&str> {
+        self.sources
+            .get(id)
+            .and_then(|c| c.display_name.as_deref())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+    }
+    /// 全部用户自定义来源（有字段映射的那些），按 id 排序保证 UI 顺序稳定。
+    pub fn custom_sources(&self) -> impl Iterator<Item = (&str, &SourceConfig)> {
+        self.sources
+            .iter()
+            .filter(|(_, c)| c.mapping.is_some())
+            .map(|(id, c)| (id.as_str(), c))
     }
     pub fn source_root(&self, id: &str) -> Option<PathBuf> {
         let path = if let Some(config) = self.sources.get(id) { config.path.as_deref() } else {
@@ -218,6 +347,24 @@ impl AppSettings {
     /// 校验设置：同步仓库不得指向 AI 工具自己的数据目录（规格 §4.3）。
     pub fn validate(&self) -> Result<()> {
         for id in self.sources.keys() { if crate::model::SourceKind::parse(id).is_none() { return Err(Error::config("数据源标识无效")); } }
+        // 自定义来源：映射写错必须在这里就报出来，而不是等扫描完发现一条会话都没有
+        for (id, config) in self.sources.iter().filter(|(_, c)| c.mapping.is_some()) {
+            let mapping = config.mapping.as_ref().expect("已按 mapping 过滤");
+            if config.path.as_deref().map(str::trim).unwrap_or("").is_empty() {
+                return Err(Error::config(format!("自定义来源「{id}」必须指定一个目录")));
+            }
+            // 不能占用已有内置来源的标识：那会让两个适配器同 id 抢同一批会话。
+            // 但 pending 例外——「把还没适配的工具自己接上」正是自定义来源的用途之一。
+            if let Some(def) = crate::adapters::registry::catalog().iter().find(|d| d.id == id) {
+                if def.access != "pending" {
+                    return Err(Error::config(format!(
+                        "来源标识「{id}」已被内置来源「{}」占用，请换一个",
+                        def.display_name
+                    )));
+                }
+            }
+            mapping.validate()?;
+        }
         if let Some(repo) = self.repo_root() {
             for (label, root) in [
                 ("Codex", paths::default_codex_root()),

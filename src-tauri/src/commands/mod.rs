@@ -10,6 +10,7 @@ pub mod imports;
 pub mod search;
 pub mod sessions;
 pub mod settings;
+pub mod sources;
 pub mod sync;
 
 /// 进度事件名（前端监听这些事件名）。

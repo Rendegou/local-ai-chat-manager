@@ -38,7 +38,11 @@ pub fn isolate_sources(settings: &mut AppSettings, tmp: &Path, keep: &[&str]) {
         }
         settings.sources.insert(
             def.id.to_string(),
-            SourceConfig { enabled: true, path: Some(empty_dir(tmp, &format!("empty-{}", def.id))) },
+            SourceConfig {
+                enabled: true,
+                path: Some(empty_dir(tmp, &format!("empty-{}", def.id))),
+                ..Default::default()
+            },
         );
     }
 }

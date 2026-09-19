@@ -60,7 +60,7 @@ impl SyncRepoAdapter {
 }
 
 impl ConversationAdapter for SyncRepoAdapter {
-    fn id(&self) -> &'static str {
+    fn id(&self) -> &str {
         "sync-repo"
     }
 

@@ -94,6 +94,7 @@ export const SOURCE_FIXTURES = {
     { id: 'gemini', displayName: 'Gemini CLI', rootPath: null, found: false, sessionHint: 4, manual: false, notes: null, detectedAt: '2026-09-19T02:00:00Z' },
     { id: 'workbuddy', displayName: 'WorkBuddy', rootPath: 'C:/Users/Demo/AppData/Roaming/WorkBuddy', found: false, sessionHint: 0, manual: false, notes: '状态数据库被占用，无法读取', detectedAt: '2026-09-19T02:00:00Z' },
     { id: 'legacy-export', displayName: 'legacy-export', rootPath: null, found: false, sessionHint: 2, manual: false, notes: null, detectedAt: '2026-09-19T02:00:00Z' },
+    { id: 'myagent', displayName: 'My Agent', rootPath: 'D:/demo/myagent/sessions', found: true, sessionHint: 1, manual: true, notes: '用户自定义来源', detectedAt: '2026-09-19T02:00:00Z' },
   ],
   catalog: [
     { id: 'codex', displayName: 'Codex', adapterVersion: 1, access: 'native', platforms: ['windows'], description: 'Codex 数据目录，留空自动发现', status: 'available', enabled: true, notes: null },
@@ -114,6 +115,25 @@ export const SOURCE_FIXTURES = {
     codex: { enabled: true, path: 'D:/demo/codex-home' },
     kimi: { enabled: true, path: 'D:/demo/kimi-home' },
     claude: { enabled: true, path: 'D:/demo/claude-projects' },
+    // 用户自定义来源：不在 catalog 里，靠一份字段映射读取
+    myagent: {
+      enabled: true,
+      path: 'D:/demo/myagent/sessions',
+      displayName: 'My Agent',
+      mapping: {
+        layout: 'jsonl',
+        messagesPath: 'messages',
+        roleField: 'role',
+        textField: 'content',
+        timeField: 'timestamp',
+        toolField: '',
+        titleField: '',
+        projectField: '',
+        roleMap: {},
+        extensions: ['jsonl'],
+        maxDepth: 8,
+      },
+    },
   },
   /**
    * 「本机未安装但有历史」与「Catalog 里没有的来源」各造一条真实会话，
@@ -133,6 +153,12 @@ export const SOURCE_FIXTURES = {
       primaryFile: '/demo/gemini/demo-2.json', contentHash: 'gemini2',
     },
     {
+      id: 'myagent/demo-1', source: 'myagent', externalId: 'demo-1', title: 'My Agent：自建工具的会话',
+      projectPath: '/home/dev/work/my-agent', createdAt: '2026-09-18T09:00:00Z', updatedAt: '2026-09-18T09:20:00Z',
+      machineId: 'demo-machine', messageCount: 2, partial: false, archived: false, syncStatus: 'local',
+      primaryFile: '/demo/myagent/demo-1.jsonl', contentHash: 'myagent1',
+    },
+    {
       id: 'legacy-export/demo-1', source: 'legacy-export', externalId: 'legacy-1', title: '旧版导出的会话（来源已下线）',
       projectPath: '/home/dev/legacy/imported', createdAt: '2026-08-30T08:00:00Z', updatedAt: '2026-08-30T08:15:00Z',
       machineId: 'demo-machine', messageCount: 2, partial: false, archived: false, syncStatus: 'local',
@@ -147,6 +173,10 @@ export const SOURCE_FIXTURES = {
     'gemini/demo-2': [
       { id: 'gemini/demo-2#1', sessionId: 'gemini/demo-2', sequence: 1, role: 'user', kind: 'message', text: '索引压缩 watchdog 相关的策略怎么选？', toolName: null, timestamp: '2026-09-16T11:02:00Z', raw: null },
       { id: 'gemini/demo-2#2', sessionId: 'gemini/demo-2', sequence: 2, role: 'assistant', kind: 'message', text: 'zstd 在日志类数据上比 gzip 更划算，解压更快。', toolName: null, timestamp: '2026-09-16T11:03:00Z', raw: null },
+    ],
+    'myagent/demo-1': [
+      { id: 'myagent/demo-1#1', sessionId: 'myagent/demo-1', sequence: 1, role: 'user', kind: 'message', text: '这个来源是用字段映射接进来的，没有专门的适配器。', toolName: null, timestamp: '2026-09-18T09:00:00Z', raw: null },
+      { id: 'myagent/demo-1#2', sessionId: 'myagent/demo-1', sequence: 2, role: 'assistant', kind: 'message', text: '映射填对了就能读出来；填错了试解析会当场报错。', toolName: null, timestamp: '2026-09-18T09:00:10Z', raw: null },
     ],
     'legacy-export/demo-1': [
       { id: 'legacy-export/demo-1#1', sessionId: 'legacy-export/demo-1', sequence: 1, role: 'user', kind: 'message', text: '这是从旧版本导出的会话，来源已经不在产品目录里了。', toolName: null, timestamp: '2026-08-30T08:00:00Z', raw: null },
@@ -536,6 +566,61 @@ const OVERLAY_SHOTS = [
       await wait(400)
       await clickByText(tab, '导入会话')
       await wait(400)
+    },
+  },
+  {
+    page: 'custom-source',
+    size: '1180x800',
+    setup: async (tab) => {
+      await gotoPage(tab, '设置')
+      await wait(400)
+      await clickByText(tab, '添加来源')
+      await wait(400)
+      // 从「待适配」的工具进入，验证「我们还没做 → 那我自己接」这条路径
+      await tab.evaluate(() => {
+        ;[...document.querySelectorAll('[role="dialog"] button')]
+          .find((b) => b.textContent?.trim() === '用自定义来源接入')
+          ?.click()
+      })
+      await wait(400)
+      // 展开高级字段，让截图覆盖全部映射项
+      await tab.evaluate(() => {
+        ;[...document.querySelectorAll('[role="dialog"] button')]
+          .find((b) => (b.textContent ?? '').includes('高级字段'))
+          ?.click()
+      })
+      await wait(300)
+    },
+  },
+  {
+    page: 'custom-preview',
+    size: '1180x800',
+    setup: async (tab) => {
+      await gotoPage(tab, '设置')
+      await wait(400)
+      await clickByText(tab, '添加来源')
+      await wait(400)
+      await tab.evaluate(() => {
+        ;[...document.querySelectorAll('[role="dialog"] button')]
+          .find((b) => b.textContent?.trim() === '用自定义来源接入')
+          ?.click()
+      })
+      await wait(400)
+      await tab.evaluate(() => {
+        const dialog = document.querySelector('[role="dialog"]')
+        const path = [...(dialog?.querySelectorAll('input') ?? [])][2]
+        if (!(path instanceof HTMLInputElement)) return
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+        setter.call(path, 'D:/demo/myagent/sessions')
+        path.dispatchEvent(new Event('input', { bubbles: true }))
+      })
+      await wait(300)
+      await tab.evaluate(() => {
+        ;[...document.querySelectorAll('[role="dialog"] button')]
+          .find((b) => b.textContent?.trim() === '试解析')
+          ?.click()
+      })
+      await wait(800)
     },
   },
   {

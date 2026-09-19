@@ -41,7 +41,7 @@ impl WorkbuddyAdapter {
 }
 
 impl ConversationAdapter for WorkbuddyAdapter {
-    fn id(&self) -> &'static str { "workbuddy" }
+    fn id(&self) -> &str { "workbuddy" }
     fn detect(&self, ctx: &AdapterContext<'_>) -> Vec<DetectionResult> {
         let root = Self::root(ctx);
         let mut notes = vec!["已验证 Windows WorkBuddyExtension 历史格式；其他版本需验证".into()];

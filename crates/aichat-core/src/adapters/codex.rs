@@ -128,7 +128,7 @@ impl Default for CodexAdapter {
 }
 
 impl ConversationAdapter for CodexAdapter {
-    fn id(&self) -> &'static str {
+    fn id(&self) -> &str {
         "codex"
     }
 

@@ -25,6 +25,8 @@ import type {
   StorageStats,
   SyncReport,
   SyncStatus,
+  FieldMapping,
+  GenericPreview,
 } from '../types/ipc'
 
 /** 前端侧错误：保留分类 + 人话信息 + 原始细节。 */
@@ -175,3 +177,7 @@ export const previewImport = (source: string, text: string) => call<import('../t
 export const confirmImport = (token: string) => call<import('../types/ipc').ImportReport>('confirm_import', { token })
 export const cancelImport = (token: string) => call<void>('cancel_import', { token })
 export const saveImportTemplate = (path: string, source: string, format: string) => call<void>('save_import_template', { path, source, format })
+
+/** 自定义来源的试解析：先看目录里能读出什么，再决定要不要保存。 */
+export const previewGenericSource = (sourceId: string, path: string, mapping: FieldMapping) =>
+  call<GenericPreview>('preview_generic_source', { sourceId, path, mapping })

@@ -342,7 +342,7 @@ pub fn preview(package: &ImportPackage, warnings: Vec<String>, token: String, fo
 
 pub struct ImportedAdapter { pub root: PathBuf }
 impl ConversationAdapter for ImportedAdapter {
-    fn id(&self) -> &'static str { "imports" }
+    fn id(&self) -> &str { "imports" }
     fn detect(&self, ctx: &AdapterContext<'_>) -> Vec<DetectionResult> {
         let mut counts = std::collections::BTreeMap::new();
         for d in self.scan(ctx).unwrap_or_default() { *counts.entry(d.source).or_insert(0) += 1; }

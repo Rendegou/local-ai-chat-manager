@@ -30,7 +30,7 @@ pub fn descriptor(source: SourceKind, path: PathBuf, root: &Path, machine: &str)
 }
 
 impl ConversationAdapter for NativeAdapter {
-    fn id(&self) -> &'static str { if self.source == SourceKind::Claude { "claude" } else { "gemini" } }
+    fn id(&self) -> &str { if self.source == SourceKind::Claude { "claude" } else { "gemini" } }
     fn detect(&self, ctx: &AdapterContext<'_>) -> Vec<DetectionResult> {
         let root = self.root(ctx);
         let count = self.scan(ctx).map(|v| v.len());

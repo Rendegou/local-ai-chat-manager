@@ -116,7 +116,7 @@ impl Default for CursorAdapter {
 }
 
 impl ConversationAdapter for CursorAdapter {
-    fn id(&self) -> &'static str {
+    fn id(&self) -> &str {
         "cursor"
     }
 

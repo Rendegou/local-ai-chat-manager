@@ -139,6 +139,13 @@ impl Library {
                 .map(|p| error::display_path(&p))
                 .filter(|p| !p.is_empty()),
         );
+        // 用户自定义来源：每个配了字段映射的来源一个通用适配器。
+        // 放在 retain 之前，让 source_enabled 对它们同样生效。
+        for (id, _) in settings.custom_sources() {
+            if let Some(adapter) = adapters::GenericJsonAdapter::from_settings(&settings, id) {
+                list.push(Box::new(adapter));
+            }
+        }
         list.retain(|a| a.is_remote() || settings.source_enabled(a.id()));
         list.push(Box::new(imports::ImportedAdapter { root: self.data_dir.join("imports") }));
         list
@@ -159,7 +166,11 @@ impl Library {
             for detection in adapter.detect(&ctx) {
                 let row = storage::types::SourceRow {
                     id: detection.source.as_str().to_string(),
-                    display_name: detection.source.display_name().to_string(),
+                    // 自定义来源的显示名只有设置里有；内置来源才查 catalog
+                    display_name: settings
+                        .source_display_name(detection.source.as_str())
+                        .unwrap_or_else(|| detection.source.display_name())
+                        .to_string(),
                     root_path: detection.root.as_ref().map(|p| error::display_path(p)),
                     found: detection.found,
                     session_hint: detection.session_hint,
@@ -281,6 +292,7 @@ impl Library {
 
     /// 数据源探测结果（缓存于 sources 表）。
     pub fn list_sources(&self) -> Result<Vec<storage::types::SourceRow>> {
+        let settings = self.settings();
         let mut rows = self.db.list_sources()?;
         let counts: Vec<(String, usize)> = self.db.with_conn(|c| {
             let mut s = c.prepare("SELECT source, COUNT(*) FROM sessions GROUP BY source")?;
@@ -292,11 +304,52 @@ impl Library {
                 rows.push(storage::types::SourceRow { id: def.id.into(), display_name: def.display_name.into(), root_path: None, found: false, session_hint: 0, manual: false, notes: Some(def.description.into()), detected_at: None });
             }
         }
+        // 用户自定义来源不在静态 catalog 里，且刚配置好时 sources 表还没有它的行
+        // （要等一次 detect）。这里补一行，否则「已连接来源」里看不到刚建好的来源。
+        for (id, config) in settings.custom_sources() {
+            if rows.iter().any(|r| r.id == id) { continue; }
+            rows.push(storage::types::SourceRow {
+                id: id.to_string(),
+                display_name: settings.source_display_name(id).unwrap_or(id).to_string(),
+                root_path: config.path.clone(),
+                found: false,
+                session_hint: 0,
+                manual: true,
+                notes: Some("用户自定义来源".to_string()),
+                detected_at: None,
+            });
+        }
+        // 用户给来源起的显示名（自定义来源）优先于 catalog / 数据库里的值，
+        // 否则刚配置好的来源会以裸 id 出现在界面上。
+        for row in rows.iter_mut() {
+            if let Some(name) = settings.source_display_name(&row.id) {
+                row.display_name = name.to_string();
+            }
+        }
         for (id,count) in counts {
             if let Some(row) = rows.iter_mut().find(|r| r.id == id) { row.session_hint = count; }
             else { rows.push(storage::types::SourceRow { display_name: id.clone(), id, root_path: None, found: true, session_hint: count, manual: true, notes: Some("导入或同步历史".into()), detected_at: None }); }
         }
         Ok(rows)
+    }
+
+    /// 试解析一个用户自定义来源：用给定的目录与字段映射跑一遍，返回可展示的摘要。
+    ///
+    /// 参数收 root + mapping 而不是读设置，是刻意的：用户要在**保存前**反复调映射，
+    /// 不必先落盘再改再删。参数也不要求这个 id 已经在设置里存在。
+    pub fn preview_generic_mapping(
+        &self,
+        source_id: &str,
+        root: &str,
+        mapping: &settings::FieldMapping,
+    ) -> Result<adapters::generic::GenericPreview> {
+        mapping.validate()?;
+        let expanded = paths::expand_home(root.trim());
+        if !paths::is_dir(&expanded) {
+            return Err(Error::config(format!("目录不存在或不可读：{}", expanded.display())));
+        }
+        let adapter = adapters::GenericJsonAdapter::new(source_id, source_id, expanded, mapping.clone())?;
+        Ok(adapter.sample())
     }
 
     pub fn source_catalog(&self) -> Result<Vec<adapters::registry::SourceCatalogEntry>> {
@@ -310,7 +363,13 @@ impl Library {
                 else if partial || notes.as_deref().map(|s| s.contains("仅发现索引")).unwrap_or(false) { "partial" }
                 else if row.map(|r| r.found).unwrap_or(false) || (def.access == "import" && row.map(|r| r.session_hint > 0).unwrap_or(false)) { "available" }
                 else { "missing" };
-            Ok(adapters::registry::SourceCatalogEntry { definition: def.clone(), status: status.into(), enabled: settings.source_enabled(def.id), notes })
+            // 一个原本判为 pending 的工具被用户用字段映射接上之后，就不该再显示「待适配」。
+            // definition 的 access 是 &'static str，这里赋字面量即可，不必改 SourceDefinition 的类型。
+            let mut definition = def.clone();
+            if settings.sources.get(def.id).map(|c| c.mapping.is_some()).unwrap_or(false) {
+                definition.access = "native";
+            }
+            Ok(adapters::registry::SourceCatalogEntry { definition, status: status.into(), enabled: settings.source_enabled(def.id), notes })
         }).collect()
     }
 
