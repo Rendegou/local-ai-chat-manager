@@ -268,6 +268,13 @@ export function SyncPage() {
                   <li key={file}>· {file}</li>
                 ))}
               </ul>
+              {/* 只冲突在共享汇总文件上是很具体的一种情况（两台机器首次同步到同一远端），
+                  不解释的话用户只会觉得同步坏了 */}
+              {conflict.hint ? (
+                <div className="pt-2">
+                  <p className="text-meta text-ink">{t.text(conflict.hint)}</p>
+                </div>
+              ) : null}
             </Notice>
           ) : null}
 

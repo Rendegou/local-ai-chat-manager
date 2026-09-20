@@ -60,6 +60,21 @@ fn 仓库侧问题与网络问题要分得开() {
 }
 
 #[test]
+fn 非快进拒绝给出拉取建议() {
+    // 用户实测的原文：远端已有本地没有的提交，push 被拒。
+    // 这条以前识别不出来——界面只给了英文报错，没有任何可执行建议。
+    assert_hint(
+        "To https://github.com/x/y.git\n ! [rejected]        master -> master (fetch first)\nerror: failed to push some refs to 'https://github.com/x/y.git'\nhint: Updates were rejected because the remote contains work that you do not\nhint: have locally. This is usually caused by another repository pushing to\nhint: the same ref. If you want to integrate the remote changes, use\nhint: 'git pull' before pushing again.",
+        "sync.hint.nonFastForward",
+    );
+    // 变体：远端被 force-push 过或历史分叉
+    assert_hint(
+        "! [rejected]        main -> main (non-fast-forward)",
+        "sync.hint.nonFastForward",
+    );
+}
+
+#[test]
 fn 认不出的报错不硬塞建议() {
     // 给不出靠谱建议时宁可什么都不说，也不要乱猜让用户白折腾
     assert!(git_failure_hint("fatal: something we have never seen before").is_none());

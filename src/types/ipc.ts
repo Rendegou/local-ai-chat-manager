@@ -283,6 +283,8 @@ export interface GitConflict {
   inRebase: boolean
   files: string[]
   message: string
+  /** 按冲突内容给出的处理建议（可翻译） */
+  hint?: LocalizedText | null
   stdout: string
   stderr: string
 }

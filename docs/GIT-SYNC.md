@@ -32,6 +32,23 @@
 | `index.lock` | 删除残留的 `.git/index.lock` |
 | `not a git repository` | 仓库目录或远端地址不对 |
 | `would be overwritten` / `diverged` | 先提交或备份本地改动 |
+| `fetch first` / `remote contains work` / `non-fast-forward` | 远端有本地没有的提交，被拒（非快进）；再点一次「立即同步」会先拉取 |
+
+### 两台机器第一次同步到同一个远端
+
+仓库根有三个**每台机器都会写**的汇总文件：`.gitignore`、`manifest.json`、
+`.aichat/machines.json`（还有 `.aichat/version.json`）。两台机器各自独立地第一次
+同步到一个远端时，rebase 必然在这几个文件上冲突——它们不是会话内容，是聚合产物。
+
+产品明确**不自动合并**（规格 §14），但会识别出「只冲突在共享元数据上」并说明处理办法。
+界面上的提示就是为此准备的：保留远端版本的那几个文件、继续 rebase，本机的会话
+会在下一次同步补回去；或者删掉本地同步仓库、从远端重新克隆一次。
+
+**另外**：修复前还有一条更容易踩到的路——远端已配置但本地分支没有上游引用
+（远端是后配上的、`.git/config` 的 branch 段丢了、仓库被重新 init 过）。那时拉取会被
+**整段跳过**，然后 `push --set-upstream` 直接撞上「远端已有本地没有的提交」，
+用户只看到一句英文 `! [rejected] ... (fetch first)`。现在这种状态会先 `git fetch`
+把远端引用接上，再 rebase，最后推送。
 
 这些分类有单元测试覆盖（`crates/aichat-core/tests/git_diagnosis_test.rs`），样例取自真实见过的报错；
 给错建议比不给更糟——用户会照着去改代理，而真正的问题是凭据。

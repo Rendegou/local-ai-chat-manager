@@ -364,10 +364,41 @@ impl GitRepo {
     }
 
     /// 首次推送并设置上游。
-    pub fn push_set_upstream(&self) -> Result<GitOutput> {
+    ///
+    /// 远端名由调用方给：写死 `origin` 在远端被改名后会直接失败。
+    pub fn push_set_upstream(&self, remote: &str) -> Result<GitOutput> {
         let branch = self.current_branch()?;
         self.git
-            .run(&self.root, &["push", "--set-upstream", "origin", &branch])
+            .run(&self.root, &["push", "--set-upstream", remote, &branch])
+    }
+
+    /// 抓取远端的全部引用（不改工作区）。
+    ///
+    /// 存在的理由：`git pull` 需要上游跟踪引用，而**有远端但没有上游**是很常见的状态
+    /// （远端是后配上的、`.git/config` 里的 branch 段丢了、仓库被重新 init 过）。
+    /// 这种时候直接 `push --set-upstream` 会被拒（远端已有本地没有的提交），
+    /// 所以先 fetch 把 `refs/remotes/<remote>/<branch>` 建出来。
+    pub fn fetch(&self, remote: &str) -> Result<GitOutput> {
+        self.git.run(&self.root, &["fetch", remote])
+    }
+
+    /// 远端上是否存在同名分支（需先 fetch）。
+    pub fn remote_branch_exists(&self, remote: &str, branch: &str) -> bool {
+        self.git
+            .run(
+                &self.root,
+                &["rev-parse", "--verify", "--quiet", &format!("refs/remotes/{remote}/{branch}")],
+            )
+            .map(|o| o.ok())
+            .unwrap_or(false)
+    }
+
+    /// 把当前分支的上游设为 `<remote>/<branch>`（先 fetch 才有意义）。
+    pub fn set_upstream(&self, remote: &str, branch: &str) -> Result<GitOutput> {
+        self.git.run(
+            &self.root,
+            &["branch", &format!("--set-upstream-to={remote}/{branch}"), branch],
+        )
     }
 
     /// 当前 rebase / merge 状态。

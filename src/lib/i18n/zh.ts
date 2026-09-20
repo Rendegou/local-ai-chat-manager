@@ -7,6 +7,8 @@ export const zh = {
    * 命名看清来源：source.* 是数据源探测，error.* 是错误。
    */
   backend: {
+    'sync.hint.sharedMetaConflict': '冲突文件都是同步仓库自己的汇总文件（.gitignore / manifest.json / .aichat/machines.json），不是会话内容——两台机器各自第一次同步到同一个远端时会出现。这里不会自动合并、也不会丢任何会话。处理办法：只保留远端版本的这几个文件后继续 rebase（git checkout --theirs .gitignore manifest.json .aichat/machines.json，然后 git add 这几个文件、git rebase --continue），下次同步会自动把本机的会话补回去；或者删掉本地同步仓库、从远端重新克隆一次。',
+    'sync.hint.nonFastForward': '远端有本地还没有的提交，所以被拒绝（非快进）。正常同步会先拉取再推送，不该出现；如果出现，通常是远端在别处被推过（别的机器、网页上改过）——再点一次「立即同步」即可，这一步会先拉取。命令行等价操作：`git pull --rebase <远端> <分支>` 之后再 push。',
     'sync.hint.dns': '解析不了主机名：多半是 DNS 被污染或没有走代理。先在终端跑 `nslookup github.com` 看能不能解析；国内直连 GitHub 常常需要代理。',
     'sync.hint.connect': '连不上远端：国内直连 GitHub 经常超时。给 git 配代理后重试，例如 `git config --global http.proxy http://127.0.0.1:7890`（端口换成你自己的），或改用国内仓库。',
     'sync.hint.reset': '连接被重置或拒绝：可能是代理没启动、端口不对，或中途被切断。确认代理在运行，并用同一端口跑一次 `git ls-remote <远端地址>` 验证。',

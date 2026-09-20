@@ -62,6 +62,10 @@ pub struct GitConflict {
     pub files: Vec<String>,
     /// 人话提示
     pub message: String,
+    /// 按冲突内容给出的处理建议（可翻译）。例如「只冲突在共享汇总文件上」——
+    /// 那是两台机器首次同步到同一远端时的必然结果，不说明的话用户只会觉得同步坏了。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hint: Option<crate::localized::LocalizedText>,
     /// 原始输出，供「查看冲突文件」与 debug 日志
     pub stdout: String,
     pub stderr: String,

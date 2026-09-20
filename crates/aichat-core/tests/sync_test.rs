@@ -366,3 +366,88 @@ fn 设置里保存的远端地址会被自动使用() {
         .iter()
         .any(|c| c.subject.starts_with("sync:")));
 }
+
+/// 有远端但没有上游跟踪时，不能因「远端有你没有的提交」被拒。
+///
+/// 这是正式环境实测到的问题：远端已经配好、远端分支也已经有提交（别处推过），
+/// 但本地分支没有上游引用。原来的流程在这种状态下**整段跳过拉取**，
+/// 然后 `push --set-upstream` 被拒：
+/// `! [rejected] master -> master (fetch first)`，
+/// 用户只看到一句英文报错。修复后应先 fetch 接上远端引用，再 rebase，最后推送。
+#[test]
+fn 有远端但无上游时不会被非快进拒绝() {
+    if !git_available() {
+        eprintln!("跳过：环境没有 git");
+        return;
+    }
+    ensure_git_identity();
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+
+    // 裸仓库充当远端
+    let bare = root.join("bare-remote.git");
+    std::fs::create_dir_all(&bare).unwrap();
+    git(&bare, &["init", "--bare"]);
+
+    // ---- 机器 A：先推一次，让远端分支上已经有提交 ----
+    let repo_a = root.join("repo-a");
+    std::fs::create_dir_all(&repo_a).unwrap();
+    let machine_a = Machine::new(root, "a", Some("kimi/normal"), Some(repo_a.clone()));
+    let report_a = machine_a.sync(true, Some(&bare.display().to_string()));
+    assert!(report_a.pushed, "A 应推送成功: {:?}", report_a.steps);
+    let branch = report_a.branch.clone();
+
+    // ---- 机器 B：全新仓库（不是 clone），只有远端地址 → 没有上游跟踪 ----
+    let repo_b = root.join("repo-b");
+    std::fs::create_dir_all(&repo_b).unwrap();
+    git(&repo_b, &["init", "--initial-branch", &branch]);
+    // B 用不同的 fixture：两台机器快照同一个会话会在 rebase 时冲突
+    // （那是产品刻意的「不自动合并」行为，不是本用例要验的东西）
+    let machine_b = Machine::new(root, "b", Some("codex/normal"), Some(repo_b.clone()));
+
+    let repo_b_handle = GitRepo::new(&repo_b, "git");
+    assert!(!repo_b_handle.has_upstream(), "前提：B 在推送前没有上游引用");
+
+    let report_b = machine_b.sync(true, Some(&bare.display().to_string()));
+
+    // 关键断言一：先 fetch 把远端引用接上。
+    // 修复前这里整段跳过拉取，然后 push --set-upstream 被拒（fetch first），
+    // 用户只看到一句英文报错、没有任何解释。
+    assert!(
+        report_b.steps.iter().any(|s| s.name.contains("fetch")),
+        "应先 fetch 把远端引用接上，步骤：{:?}",
+        report_b.steps
+    );
+
+    // 关键断言二：结局是「识别为冲突」而不是「莫名其妙的拒绝」。
+    // 两台机器各自第一次同步到同一个远端时，仓库根的共享汇总文件
+    // （.gitignore / manifest.json / .aichat/machines.json）必然同时被改，
+    // 而本产品明确不自动合并——所以要明确告诉用户冲突在哪、该怎么办。
+    let conflict = report_b.conflict.as_ref().expect("应识别为冲突而不是拒绝");
+    assert!(
+        conflict.files.iter().all(|f| {
+            let n = f.replace('\\', "/");
+            matches!(
+                n.as_str(),
+                ".gitignore" | "manifest.json" | ".aichat/machines.json" | ".aichat/version.json"
+            )
+        }),
+        "本次冲突应只涉及共享汇总文件，实际：{:?}",
+        conflict.files
+    );
+    assert!(
+        conflict.message.contains("共享元数据"),
+        "冲突提示要点明是共享元数据，实际：{}",
+        conflict.message
+    );
+    assert!(conflict.hint.is_some(), "要给出可执行的处理办法");
+    assert!(
+        report_b
+            .steps
+            .iter()
+            .any(|s| s.name.contains("rebase") && s.hint.is_some()),
+        "建议要挂在失败步骤上，界面才看得到：{:?}",
+        report_b.steps
+    );
+    assert!(!report_b.pushed, "有冲突时不应继续推送");
+}

@@ -370,6 +370,14 @@ pub fn git_failure_hint(stderr: &str) -> Option<crate::localized::LocalizedText>
             "目标不是 git 仓库或远端地址不对：确认仓库目录选对了、远端地址能在浏览器里打开。",
         ));
     }
+    if has("remote contains work") || has("fetch first") || has("non-fast-forward")
+        || has("updates were rejected")
+    {
+        return Some(crate::localized::LocalizedText::new(
+            "sync.hint.nonFastForward",
+            "远端有本地还没有的提交，所以被拒绝（非快进）。正常同步会先拉取再推送，不该出现；如果出现，通常是远端在别处被推过（别的机器、网页上改过）——再点一次「立即同步」即可，这一步会先拉取。命令行等价操作：`git pull --rebase <远端> <分支>` 之后再 push。",
+        ));
+    }
     if has("would be overwritten") || has("diverged") {
         return Some(crate::localized::LocalizedText::new(
             "sync.hint.diverged",
@@ -507,18 +515,43 @@ pub fn sync_now(
     let remotes = repo.remotes()?;
     report.remote = remotes.first().map(|(_, url)| url.clone());
     let has_remote = !remotes.is_empty();
+    let remote_name = remotes.first().map(|(name, _)| name.clone());
+    // 有远端但没有上游：先把远端引用抓下来并接上。
+    //
+    // 不做这一步的后果是实测出来的：拉取被整段跳过（步骤显示「已跳过」），
+    // 然后 `push --set-upstream` 被远端拒掉——
+    // `! [rejected] master -> master (fetch first)`，
+    // 而用户只看到一句英文报错，完全不知道是「远端有本地没有的提交」。
+    if has_remote && !repo.has_upstream() {
+        if let Some(name) = remote_name.as_deref() {
+            let branch = repo.current_branch()?;
+            let fetch = repo.fetch(name)?;
+            // fetch 成功且远端确有同名分支时才有必要接上游；否则是首次推送，保持现状
+            if fetch.ok() && repo.remote_branch_exists(name, &branch) {
+                let _ = repo.set_upstream(name, &branch);
+            }
+            push_git_step(
+                &mut report,
+                "获取远端引用（fetch）",
+                &fetch,
+                "已获取远端引用",
+                t4.elapsed().as_millis(),
+            );
+        }
+    }
     if has_remote && repo.has_upstream() {
         let pull = repo.pull_rebase()?;
         report.pulled = pull.ok();
         let conflict = detect_conflict(&repo, &pull.stdout, &pull.stderr)?;
         if let Some(conflict) = conflict {
-            push_step(
-                &mut report,
-                "拉取远端（rebase）",
-                false,
-                conflict.message.clone(),
-                t4.elapsed().as_millis(),
-            );
+            report.steps.push(SyncStep {
+                name: "拉取远端（rebase）".to_string(),
+                ok: false,
+                detail: conflict.message.clone(),
+                log: String::new(),
+                hint: conflict.hint.clone(),
+                duration_ms: t4.elapsed().as_millis() as u64,
+            });
             report.conflict = Some(conflict);
             // 冲突时不推送、不继续，等待用户处理（规格 §14）
             report.duration_ms = started.elapsed().as_millis() as u64;
@@ -536,7 +569,11 @@ pub fn sync_now(
             &mut report,
             "拉取远端（rebase）",
             true,
-            "未配置远端或上游分支，已跳过".to_string(),
+            if has_remote {
+                "远端还没有同名分支，首次推送后自动接上".to_string()
+            } else {
+                "未配置远端，已跳过".to_string()
+            },
             t4.elapsed().as_millis(),
         );
     }
@@ -547,7 +584,7 @@ pub fn sync_now(
         let push = if repo.has_upstream() {
             repo.push()?
         } else {
-            repo.push_set_upstream()?
+            repo.push_set_upstream(remote_name.as_deref().unwrap_or("origin"))?
         };
         report.pushed = push.ok();
         push_git_step(
@@ -639,10 +676,21 @@ pub fn status(ctx: &SyncContext<'_>) -> Result<SyncStatusDto> {
     let conflicts = repo.conflicts().unwrap_or_default();
     let state = repo.repo_state();
     if !conflicts.is_empty() || state != RepoState::Clean {
+        let shared_meta = !conflicts.is_empty() && conflicts.iter().all(|f| is_shared_meta_file(f));
         dto.conflict = Some(GitConflict {
             in_rebase: state == RepoState::Rebase,
             files: conflicts,
-            message: "当前仓库存在冲突，请手动处理后重试".to_string(),
+            message: if shared_meta {
+                "冲突文件都是同步仓库的共享元数据，不是会话内容".to_string()
+            } else {
+                "当前仓库存在冲突，请手动处理后重试".to_string()
+            },
+            hint: shared_meta.then(|| {
+                crate::localized::LocalizedText::new(
+                    "sync.hint.sharedMetaConflict",
+                    "冲突文件都是同步仓库自己的汇总文件（.gitignore / manifest.json / .aichat/machines.json），不是会话内容——两台机器各自第一次同步到同一个远端时会出现。这里不会自动合并、也不会丢任何会话。处理办法：只保留远端版本的这几个文件后继续 rebase（git checkout --theirs .gitignore manifest.json .aichat/machines.json，然后 git add 这几个文件、git rebase --continue），下次同步会自动把本机的会话补回去；或者删掉本地同步仓库、从远端重新克隆一次。",
+                )
+            }),
             stdout: String::new(),
             stderr: String::new(),
         });
@@ -726,11 +774,25 @@ fn detect_conflict(repo: &GitRepo, stdout: &str, stderr: &str) -> Result<Option<
     if files.is_empty() && state == RepoState::Clean {
         return Ok(None);
     }
+    // 只冲突在「每台机器都会写的共享文件」上是另一回事：
+    // `.gitignore` / `manifest.json` / `.aichat/machines.json` 都是聚合产物，
+    // 两台机器各自首次同步到同一个远端时必然同时改它们。
+    // 用户看不出这一点，只会觉得「同步坏了」，所以说清楚是哪几个文件、以及怎么处理。
+    let shared_meta = !files.is_empty() && files.iter().all(|f| is_shared_meta_file(f));
     let message = if state == RepoState::Rebase {
-        format!(
-            "git pull --rebase 遇到冲突（{} 个文件），已暂停 rebase",
-            files.len()
-        )
+        if shared_meta {
+            format!(
+                "git pull --rebase 遇到冲突，且冲突文件都是同步仓库的共享元数据（{} 个）",
+                files.len()
+            )
+        } else {
+            format!(
+                "git pull --rebase 遇到冲突（{} 个文件），已暂停 rebase",
+                files.len()
+            )
+        }
+    } else if shared_meta {
+        format!("冲突文件都是同步仓库的共享元数据（{} 个）", files.len())
     } else {
         format!("合并过程中存在冲突（{} 个文件）", files.len())
     };
@@ -738,9 +800,30 @@ fn detect_conflict(repo: &GitRepo, stdout: &str, stderr: &str) -> Result<Option<
         in_rebase: state == RepoState::Rebase,
         files,
         message,
+        hint: shared_meta.then(|| {
+            crate::localized::LocalizedText::new(
+                "sync.hint.sharedMetaConflict",
+                "冲突文件都是同步仓库自己的汇总文件（.gitignore / manifest.json / .aichat/machines.json），不是会话内容——两台机器各自第一次同步到同一个远端时会出现。\
+这里不会自动合并、也不会丢任何会话。处理办法：只保留远端版本的这几个文件后继续 rebase\
+（`git checkout --theirs .gitignore manifest.json .aichat/machines.json` 然后 `git add` 这几个文件、\
+`git rebase --continue`），下次同步会自动把本机的会话补回去；或者删掉本地同步仓库、从远端重新克隆一次。",
+            )
+        }),
         stdout: stdout.to_string(),
         stderr: stderr.to_string(),
     }))
+}
+
+/// 是否是「每台机器都会写」的共享汇总文件。
+///
+/// 这些不是会话内容，而是仓库级的聚合产物；把它们和会话文件区分开，
+/// 才能在冲突时给出有意义的说明。
+fn is_shared_meta_file(path: &str) -> bool {
+    let normalized = path.replace('\\', "/");
+    matches!(
+        normalized.as_str(),
+        ".gitignore" | "manifest.json" | ".aichat/machines.json" | ".aichat/version.json"
+    )
 }
 
 /// 默认提交信息（规格 §13）：`sync: <machine> <ISO 时间>`。
@@ -755,14 +838,6 @@ pub fn default_commit_message(machine_id: &str, _branch: &str) -> String {
     format!("sync: {} {}", label, chrono::Utc::now().to_rfc3339())
 }
 
-/// 取多行输出的第一行（用于 UI 简短提示）。
-fn first_line(text: &str) -> String {
-    text.lines()
-        .find(|l| !l.trim().is_empty())
-        .unwrap_or("")
-        .trim()
-        .to_string()
-}
 
 /// 人类可读的字节数（同步步骤详情用）。
 fn human_bytes(bytes: u64) -> String {
