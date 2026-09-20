@@ -1,28 +1,49 @@
 name: Release
 
-# 打 tag（v*）即触发：Windows 出 msi+nsis，macOS 出 dmg（Apple Silicon），并自动挂到 GitHub Release。
-# 注：macos-13（Intel）runner 已被 GitHub 下线（任务会永远排队），Intel 包需要时再加回可用标签。
+# 触发方式：
+#   1. 推 v* tag（常规发版）
+#   2. Actions 页面手动触发（workflow_dispatch）：填 tag 就重新构建并覆盖该版本产物，
+#      留空则只构建 + 校验、不发布（用来验证 workflow 本身）
+#
+# 流程刻意拆成两段：build（矩阵：Windows / macOS）→ 各自校验产物 → 单个 publish 挂 Release。
+# 校验不通过就没有任何东西进 Release —— v0.4.2 的坏 dmg 就是因为「先发布、没人校验」。
 on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要构建并发布的 tag（如 v0.4.2）；留空则只构建不发布'
+        required: false
+        default: ''
 
 permissions:
   contents: write
 
 jobs:
   build:
+    name: 构建 ${{ matrix.name }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: windows-latest
-            targets: nsis,msi
+            name: windows-x64
+            args: --bundles nsis,msi
+            paths: |
+              target/release/bundle/msi/*.msi
+              target/release/bundle/nsis/*-setup.exe
           - os: macos-latest
-            targets: dmg
+            name: macos-universal
+            # universal：aarch64 + x86_64 合成一个 dmg，Intel 与 Apple Silicon 共用
+            args: --target universal-apple-darwin --bundles dmg
+            paths: target/**/bundle/dmg/*.dmg
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - uses: actions/setup-node@v4
         with:
@@ -31,17 +52,103 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      # universal 需要两个架构的标准库；runner 只自带宿主架构那一个
+      - name: macOS 补装 x86_64 target
+        if: runner.os == 'macOS'
+        run: rustup target add x86_64-apple-darwin
+
       - uses: swatinem/rust-cache@v2
 
       - run: npm ci
 
-      - uses: tauri-apps/tauri-action@v0
+      - name: 构建安装包
+        run: npm run tauri:build -- ${{ matrix.args }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # ad-hoc 签名（伪身份 "-"）。没有它时 .app 完全没有签名（只有链接器给
+          # arm64 二进制加的那一份），下载后 Gatekeeper 报「已损坏，无法打开」。
+          # 配好 Apple 证书后把这些 secret 填上即自动切换为正式签名 + 公证。
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY || '-' }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: 校验 macOS 产物
+        if: runner.os == 'macOS'
+        run: bash .github/scripts/verify-macos-dmg.sh
+
+      - name: 校验 Windows 产物
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # 让中文报错在 CI 日志里可读（默认按控制台代码页输出会乱码）
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          $version = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          $msi = @(Get-ChildItem -Path target/release/bundle/msi/*.msi -ErrorAction SilentlyContinue)
+          $exe = @(Get-ChildItem -Path target/release/bundle/nsis/*-setup.exe -ErrorAction SilentlyContinue)
+          if ($msi.Count -lt 1 -or $exe.Count -lt 1) {
+            throw "缺少安装包：msi=$($msi.Count) nsis-setup.exe=$($exe.Count)"
+          }
+          foreach ($f in @($msi) + @($exe)) {
+            if ($f.Length -lt 1MB) { throw "$($f.Name) 体积异常（$([math]::Round($f.Length / 1MB, 2)) MB）" }
+            if ($f.Name -notlike "*$version*") {
+              throw "$($f.Name) 文件名里没有版本号 $version —— tag 与 tauri.conf.json 的版本对不上？"
+            }
+            Write-Host ("{0}  {1:N2} MB" -f $f.Name, ($f.Length / 1MB))
+          }
+
+      - uses: actions/upload-artifact@v4
         with:
-          # 显式传 tag：否则 action 在某些事件形态下检测不到 tag，会静默跳过上传
-          tagName: ${{ github.ref_name }}
-          releaseName: 'Local AI Chat Manager v__VERSION__'
-          releaseDraft: false
-          prerelease: false
-          args: --bundles ${{ matrix.targets }}
+          name: ${{ matrix.name }}
+          path: ${{ matrix.paths }}
+          if-no-files-found: error
+
+  publish:
+    name: 发布到 Release
+    needs: build
+    # 手动触发时留空 tag（分支名不以 v 开头）就只构建不发布
+    if: startsWith(inputs.tag || github.ref_name, 'v')
+    runs-on: ubuntu-latest
+    steps:
+      # 注意不覆盖 ref：说明文件取自触发这次运行的分支/tag。
+      # （build 用的是要发布的 tag，但补发老 tag 时它里面可能还没有这份说明文件）
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: 列出待发布产物
+        run: ls -lh dist
+
+      - name: 创建或更新 Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          TITLE="Local AI Chat Manager $TAG"
+          if [ -f .github/release-notes.md ]; then
+            NOTES=(--notes-file .github/release-notes.md)
+          else
+            NOTES=(--generate-notes)
+          fi
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG 已存在：刷新说明并覆盖产物"
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TITLE" "${NOTES[@]}"
+            # 清掉已经不再产出的旧产物（例如 v0.4.2 那个只有 arm64 的坏 dmg），
+            # 否则它会和新包一起挂在 Release 上，用户很可能下错。
+            want=$(cd dist && ls | tr ' ' '.')
+            for name in $(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name'); do
+              if ! printf '%s\n' "$want" | grep -qxF "$name"; then
+                echo "删除过期产物：$name"
+                gh release delete-asset "$TAG" "$name" --repo "$GITHUB_REPOSITORY" --yes
+              fi
+            done
+            gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber dist/*
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TITLE" "${NOTES[@]}" dist/*
+          fi
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url --jq .url

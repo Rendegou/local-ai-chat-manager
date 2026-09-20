@@ -45,9 +45,19 @@ Tech stack: Tauri 2, Rust, React, TypeScript, SQLite FTS5.
 - Windows：已完成构建、安装包和主要流程测试
 - macOS / Linux：已有平台适配代码和打包配置，尚未在真机验证
 - 多机同步：自动化测试已覆盖，真实设备迁移仍需进一步测试
-- 发布包：暂未提供，请从源码运行
+- 发布包：[Releases](https://github.com/Rendegou/local-ai-chat-manager/releases) 提供 Windows 与 macOS 安装包（CI 构建，发布前校验产物）
 
 已知限制见 [docs/LIMITATIONS.md](docs/LIMITATIONS.md)。
+
+### 下载安装
+
+安装包在 [Releases](https://github.com/Rendegou/local-ai-chat-manager/releases) 页面：
+
+- Windows：`.msi`（推荐）或 `-setup.exe`；出现 SmartScreen 提示时选「更多信息 → 仍要运行」
+- macOS：`.dmg`，universal 包，Intel 与 Apple Silicon 通用。安装包只做了 ad-hoc 签名、未做公证，首次打开会被系统拦下：
+  右键点 app →「打开」→ 再点「打开」；或到「系统设置 → 隐私与安全性」点「仍要打开」。
+  若提示「已损坏，无法打开」，在终端执行一次
+  `xattr -cr "/Applications/Local AI Chat Manager.app"`（这是下载隔离标记导致的，文件本身没坏）
 
 ### 从源码运行
 
@@ -157,9 +167,18 @@ The project is still in Beta: suitable for trial and feedback, not recommended a
 - Windows: build, installer, and main workflows tested
 - macOS / Linux: platform adaptation code and packaging configuration exist, but not yet verified on real hardware
 - Multi-machine sync: covered by automated tests; real-device migration still needs further testing
-- Release builds: not provided yet; please run from source
+- Release builds: Windows and macOS installers are on the [Releases](https://github.com/Rendegou/local-ai-chat-manager/releases) page (built by CI, artifacts verified before publishing)
 
 See [docs/LIMITATIONS.md](docs/LIMITATIONS.md) for known limitations.
+
+### Installation
+
+Installers are on the [Releases](https://github.com/Rendegou/local-ai-chat-manager/releases) page:
+
+- Windows: `.msi` (recommended) or `-setup.exe`; on a SmartScreen prompt choose "More info → Run anyway"
+- macOS: `.dmg`, a universal build that runs on both Intel and Apple Silicon. It is ad-hoc signed but not notarized, so the first launch is blocked:
+  right-click the app → Open → Open again, or use System Settings → Privacy & Security → "Open Anyway".
+  If macOS says the app is damaged, run `xattr -cr "/Applications/Local AI Chat Manager.app"` once (that is the download quarantine flag, not a broken file)
 
 ### Run from source
 

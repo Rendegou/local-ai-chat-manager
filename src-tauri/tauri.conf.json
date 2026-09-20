@@ -44,6 +44,10 @@
     ],
     "category": "DeveloperTool",
     "shortDescription": "Local-first AI coding chat history manager",
-    "longDescription": "自动发现、索引、搜索本机 Codex / Kimi Code 会话历史，并通过独立 Git 仓库在多台电脑之间同步。"
+    "longDescription": "自动发现、索引、搜索本机 Codex / Kimi Code 会话历史，并通过独立 Git 仓库在多台电脑之间同步。",
+    "macOS": {
+      "signingIdentity": "-",
+      "minimumSystemVersion": "10.15"
+    }
   }
 }
