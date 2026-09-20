@@ -184,6 +184,7 @@ impl GitCommand {
             if e.kind() == std::io::ErrorKind::NotFound {
                 Error::Git {
                     code: -1,
+                    args: args.iter().map(|a| a.to_string()).collect(),
                     stdout: String::new(),
                     stderr: format!("找不到 git 可执行文件：{}", self.exe),
                 }
@@ -205,6 +206,7 @@ impl GitCommand {
         if !out.ok() {
             return Err(Error::Git {
                 code: out.code,
+                args: out.args,
                 stdout: out.stdout,
                 stderr: out.stderr,
             });

@@ -1,5 +1,43 @@
 # Git 同步说明
 
+## 同步失败怎么排查（国内连 GitHub 的常见情况）
+
+同步页的「归档与高级诊断」里有**远端连接诊断**，连不上时先跑它一次：
+
+- 铺开环境：仓库路径、分支、远端、git 版本、`git config` 里的
+  http/https/credential 项、进程里生效的代理环境变量；
+- 跑一次真实探测 `git ls-remote --heads <远端>`（带 `http.lowSpeedTime=20`
+  与 `connectTimeout=20`，不会挂到一两分钟），把**命令行 / 退出码 / stdout / stderr**
+  原样贴出来；
+- 按 stderr 特征给一条可执行的建议；
+- 「复制诊断信息」把上面整段复制走，可以直接贴给别人看。
+
+同步步骤失败时也一样：每一步都有「查看输出」，展开就是那条命令的完整原始输出。
+此前只显示 stderr 的**第一行**——而 git 的报错第一行常是
+`fatal: unable to access '...'` 这类外层包装，真正的原因（curl 的错误码、
+证书、DNS）在后面，只看第一行没法定位。
+
+### 按报错给出的建议
+
+| stderr 特征 | 建议 |
+| --- | --- |
+| `Could not resolve host` | DNS 被污染或没走代理 |
+| `Failed to connect ... Timed out` | 直连超时，给 git 配代理 |
+| `Connection refused` / `reset` | 代理没开或端口不对（**先于上一行判断**：`Failed to connect to 127.0.0.1:7890: Connection refused` 说明的是代理自己拒绝） |
+| `SSL certificate problem` | 代理做中间人或根证书不全 |
+| `could not read Username` / `Authentication failed` | 非交互调用拿不到凭据，先在终端建立凭据 |
+| `Permission denied (publickey)` | SSH key 未配置 |
+| `Repository not found` | 地址或权限问题 |
+| `RPC failed` / `early EOF` | 大仓库推送被掐断，调大 `http.postBuffer` 或分批 |
+| `index.lock` | 删除残留的 `.git/index.lock` |
+| `not a git repository` | 仓库目录或远端地址不对 |
+| `would be overwritten` / `diverged` | 先提交或备份本地改动 |
+
+这些分类有单元测试覆盖（`crates/aichat-core/tests/git_diagnosis_test.rs`），样例取自真实见过的报错；
+给错建议比不给更糟——用户会照着去改代理，而真正的问题是凭据。
+
+---
+
 ## 1. 为什么用独立仓库
 
 **不要**直接对 `~/.codex/` 或 `~/.kimi-code/` 执行 Git 操作：

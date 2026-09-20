@@ -517,6 +517,16 @@ impl Library {
     }
 
     /// git 日志。
+    /// 远端连通性诊断（「测试远端连接」）。
+    pub fn diagnose_remote(&self) -> Result<sync::RemoteDiagnosis> {
+        let settings = self.settings();
+        let adapters = self.adapters();
+        let diagnosis = sync::diagnose_remote(&self.sync_context(&settings, &adapters))?;
+        // 诊断结果里含远端地址与代理配置，落一行日志便于事后排查
+        tracing::info!(remote = ?diagnosis.remote, "远端连通性诊断完成");
+        Ok(diagnosis)
+    }
+
     pub fn git_log(&self, limit: usize) -> Result<Vec<sync::git::GitCommit>> {
         let settings = self.settings();
         let adapters = self.adapters();

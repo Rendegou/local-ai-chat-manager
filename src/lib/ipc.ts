@@ -28,6 +28,7 @@ import type {
   FieldMapping,
   GenericPreview,
   GitCommit,
+  RemoteDiagnosis,
 } from '../types/ipc'
 
 /** 前端侧错误：保留分类 + 人话信息 + 原始细节。 */
@@ -143,6 +144,9 @@ export const syncNow = (options?: {
 
 /** Git 日志。 */
 export const gitLog = (limit = 30) => call<GitCommit[]>('git_log', { limit })
+
+/** 远端连通性诊断：一次把环境与真实探测结果拿回来。 */
+export const diagnoseRemote = () => call<RemoteDiagnosis>('diagnose_remote')
 
 /** 中止 rebase。 */
 export const abortRebase = () => call<void>('abort_rebase')

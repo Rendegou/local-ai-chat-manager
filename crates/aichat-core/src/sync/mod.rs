@@ -37,7 +37,18 @@ pub use snapshot::{SnapshotEntry, SnapshotOutcome, SnapshotReport};
 pub struct SyncStep {
     pub name: String,
     pub ok: bool,
+    /// 一行摘要（成功/失败都能看）
     pub detail: String,
+    /// 原始输出：命令行 + 退出码 + stdout + stderr。
+    ///
+    /// 失败时界面上要能展开看到它——「在国内连不上 GitHub」这类问题，
+    /// 只给一行摘要（原来的做法就是 `first_line(&stderr)`）根本没法定位到底是
+    /// DNS、代理、证书还是凭据。成功时为空，不占地方。
+    #[serde(default)]
+    pub log: String,
+    /// 按 stderr 特征给出的可执行建议（可翻译）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hint: Option<crate::localized::LocalizedText>,
     pub duration_ms: u64,
 }
 
@@ -139,14 +150,233 @@ impl SyncContext<'_> {
     }
 }
 
+/// 远端连通性诊断结果（「测试远端连接」按钮）。
+///
+/// 为什么需要它：在国内连 GitHub 失败时，光有 stderr 往往还不够——
+/// 用户不知道自己有没有配代理、凭据助手是什么、当前用的是哪个远端。
+/// 一次把「环境 + 一次真实探测」摊开给人看，比让人猜快得多。
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteDiagnosis {
+    pub git_version: String,
+    pub repo: String,
+    pub branch: String,
+    pub remote: Option<String>,
+    /// `git config --get-regexp ^(http|https|credential)\.` 的原始输出（代理与凭据助手）
+    pub net_config: String,
+    /// 进程里生效的代理环境变量
+    pub env_proxy: String,
+    /// 一次真实探测：`git ls-remote --heads <远端>`
+    pub probe: Option<GitOutput>,
+    /// 探测失败时的可执行建议
+    pub hint: Option<crate::localized::LocalizedText>,
+    /// 可直接复制（贴给别人看）的整段诊断文本
+    pub report: String,
+}
+
+/// 跑一次远端连通性诊断。
+pub fn diagnose_remote(ctx: &SyncContext<'_>) -> Result<RemoteDiagnosis> {
+    let root = ctx.require_repo()?;
+    let repo = ctx.repo(&root);
+    let status = repo.status()?;
+    let git_version = repo.git().version().ok();
+    let remote = repo.remotes()?.first().map(|(_, url)| url.clone());
+    let net_config = repo
+        .git()
+        .run(&root, &["config", "--get-regexp", "^(http|https|credential)\\."])
+        .map(|o| o.stdout.trim().to_string())
+        .unwrap_or_default();
+    let env_proxy = ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy"]
+        .iter()
+        .filter_map(|key| std::env::var(key).ok().map(|value| format!("{key}={value}")))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    // 真实探测：给 curl 加一个低速超时，否则国内不通时会挂到一两分钟
+    let probe = remote.as_deref().map(|url| {
+        repo.git().run(
+            &root,
+            &[
+                "-c",
+                "http.lowSpeedLimit=1000",
+                "-c",
+                "http.lowSpeedTime=20",
+                "-c",
+                "http.connectTimeout=20",
+                "ls-remote",
+                "--heads",
+                url,
+            ],
+        )
+    }).transpose()?;
+
+    let hint = probe
+        .as_ref()
+        .filter(|p| !p.ok())
+        .and_then(|p| git_failure_hint(&p.stderr));
+
+    let mut report = String::new();
+    report.push_str(&format!("仓库：{}\n", root.display()));
+    report.push_str(&format!("分支：{}\n", status.branch));
+    report.push_str(&format!("远端：{}\n", remote.as_deref().unwrap_or("（未配置）")));
+    report.push_str(&format!("git：{}\n", git_version.as_deref().unwrap_or("未找到")));
+    report.push_str(&format!(
+        "网络配置：{}\n",
+        if net_config.is_empty() { "（无 http/https/credential 配置）" } else { &net_config }
+    ));
+    report.push_str(&format!(
+        "代理环境变量：{}\n",
+        if env_proxy.is_empty() { "（无）" } else { &env_proxy }
+    ));
+    if let Some(probe) = probe.as_ref() {
+        report.push_str("\n");
+        report.push_str(&git_failure_log(probe));
+    }
+    if let Some(hint) = hint.as_ref() {
+        report.push_str(&format!("\n建议：{}\n", hint.text()));
+    }
+
+    Ok(RemoteDiagnosis {
+        git_version: git_version.unwrap_or_default(),
+        repo: root.display().to_string(),
+        branch: status.branch.clone(),
+        remote,
+        net_config,
+        env_proxy,
+        probe,
+        hint,
+        report,
+    })
+}
+
 /// 追加一条同步步骤记录（用函数而不是闭包，避免同时借用 `report`）。
 fn push_step(report: &mut SyncReport, name: &str, ok: bool, detail: String, elapsed_ms: u128) {
     report.steps.push(SyncStep {
         name: name.to_string(),
         ok,
         detail,
+        log: String::new(),
+        hint: None,
         duration_ms: elapsed_ms as u64,
     });
+}
+
+/// 记录一条「跑过 git 命令」的步骤：成功时只留摘要，失败时带上完整原始输出与建议。
+fn push_git_step(
+    report: &mut SyncReport,
+    name: &str,
+    out: &git::GitOutput,
+    ok_detail: &str,
+    elapsed_ms: u128,
+) {
+    report.steps.push(SyncStep {
+        name: name.to_string(),
+        ok: out.ok(),
+        detail: if out.ok() { ok_detail.to_string() } else { crate::error::first_cause(&out.stderr).to_string() },
+        log: if out.ok() { String::new() } else { git_failure_log(out) },
+        hint: if out.ok() { None } else { git_failure_hint(&out.stderr) },
+        duration_ms: elapsed_ms as u64,
+    });
+}
+
+/// 一段可以直接复制给别人的诊断块：跑了什么、退出码多少、两边输出是什么。
+pub fn git_failure_log(out: &git::GitOutput) -> String {
+    let mut text = format!("$ git {}
+退出码 {}\n", out.args.join(" "), out.code);
+    if !out.stdout.trim().is_empty() {
+        text.push_str("--- stdout ---
+");
+        text.push_str(out.stdout.trim_end());
+        text.push('\n');
+    }
+    if !out.stderr.trim().is_empty() {
+        text.push_str("--- stderr ---
+");
+        text.push_str(out.stderr.trim_end());
+        text.push('\n');
+    }
+    text
+}
+
+/// 按 stderr 特征给出「下一步做什么」。
+///
+/// 这些判断是照着国内最常见的失败整理的：GitHub 直连不通、需要走代理、
+/// HTTPS 凭据不可用、SSH key 没配、大仓库推送被掐断。给一条能立刻执行的动作，
+/// 比让用户自己解读 curl 的错误码有用得多。
+pub fn git_failure_hint(stderr: &str) -> Option<crate::localized::LocalizedText> {
+    let s = stderr.to_ascii_lowercase();
+    let has = |needle: &str| s.contains(&needle.to_ascii_lowercase());
+
+    if has("could not resolve host") || has("name or service not known") || has("temporary failure in name resolution") {
+        return Some(crate::localized::LocalizedText::new(
+            "sync.hint.dns",
+            "解析不了主机名：多半是 DNS 被污染或没有代理。先试 `nslookup github.com`；国内直连 GitHub 常常需要代理。",
+        ));
+    }
+    // 顺序有讲究：`Failed to connect to 127.0.0.1 port 7890: Connection refused` 同时命中
+    // 「failed to connect」与「connection refused」，而它说明的是**代理自己拒绝**，
+    // 不是 GitHub 连不上。先判更具体的那个，否则会把代理问题误导成网络问题。
+    if has("connection reset") || has("connection refused") {
+        return Some(crate::localized::LocalizedText::new(
+            "sync.hint.reset",
+            "连接被重置或拒绝：可能是代理没开、代理端口不对，或中途被切断。确认代理在运行，并用同一个端口跑一次 `git ls-remote <远端地址>` 验证。",
+        ));
+    }
+    if has("failed to connect") || has("connection timed out") || has("operation timed out") {
+        return Some(crate::localized::LocalizedText::new(
+            "sync.hint.connect",
+            "连不上远端：国内直连 GitHub 经常超时。给 git 配代理后重试（例如 `git config --global http.proxy http://127.0.0.1:7890`），或改用 Gitee 之类的国内仓库。",
+        ));
+    }
+    if has("ssl certificate problem") || has("unable to get local issuer certificate") || has("server certificate verification failed") {
+        return Some(crate::localized::LocalizedText::new(
+            "sync.hint.tls",
+            "TLS 证书校验失败：常见于代理做了中间人（抓包工具）或系统根证书不全。不建议直接关掉校验，先把代理的证书装进系统信任链。",
+        ));
+    }
+    if has("could not read username") || has("could not read password") || has("terminal prompts disabled") || has("authentication failed") {
+        return Some(crate::localized::LocalizedText::new(
+            "sync.hint.credentials",
+            "远端要凭据但拿不到：应用以非交互方式调用 git，不会弹窗。用 HTTPS 时凭据应由系统 Git Credential Manager 保存——先在终端手动 `git push` 一次把凭据存下来，或改用带 token 的地址。",
+        ));
+    }
+    if has("permission denied") || has("publickey") {
+        return Some(crate::localized::LocalizedText::new(
+            "sync.hint.ssh",
+            "SSH 认证失败：本机没有可用的 key，或 key 没加到远端账号。可以改用 https:// 地址（凭据交给系统 Git Credential Manager），或先在终端确认 `ssh -T git@github.com` 能通。",
+        ));
+    }
+    if has("repository not found") {
+        return Some(crate::localized::LocalizedText::new(
+            "sync.hint.notFound",
+            "远端仓库不存在或当前凭据没有权限：检查地址拼写、仓库是否已创建、以及凭据属于哪个账号。私有仓库还需要 token 具备 repo 权限。",
+        ));
+    }
+    if has("rpc failed") || has("early eof") || has("remote end hung up") {
+        return Some(crate::localized::LocalizedText::new(
+            "sync.hint.truncated",
+            "推送被中途掐断（大仓库常见）：可以先调大缓冲 `git config --global http.postBuffer 524288000`，或分几次同步让每次推送的数据量小一些。",
+        ));
+    }
+    if has("index.lock") {
+        return Some(crate::localized::LocalizedText::new(
+            "sync.hint.lock",
+            "仓库里有残留的 index.lock：确认没有别的 git 进程在跑之后，删掉仓库目录下的 .git/index.lock 再重试。",
+        ));
+    }
+    if has("not a git repository") || has("does not appear to be a git repository") {
+        return Some(crate::localized::LocalizedText::new(
+            "sync.hint.notRepo",
+            "目标不是 git 仓库或远端地址不对：确认仓库目录选对了、远端地址能在浏览器里打开。",
+        ));
+    }
+    if has("would be overwritten") || has("diverged") {
+        return Some(crate::localized::LocalizedText::new(
+            "sync.hint.diverged",
+            "本地与远端有分叉且会覆盖未提交的改动：先提交或备份本地改动，再看冲突处理。不会自动合并、也不会丢数据。",
+        ));
+    }
+    None
 }
 
 /// 读取设置中记录的同步状态键。
@@ -294,15 +524,11 @@ pub fn sync_now(
             report.duration_ms = started.elapsed().as_millis() as u64;
             return Ok(report);
         }
-        push_step(
+        push_git_step(
             &mut report,
             "拉取远端（rebase）",
-            pull.ok(),
-            if pull.ok() {
-                "已同步远端提交".to_string()
-            } else {
-                first_line(&pull.stderr)
-            },
+            &pull,
+            "已同步远端提交",
             t4.elapsed().as_millis(),
         );
     } else {
@@ -324,15 +550,11 @@ pub fn sync_now(
             repo.push_set_upstream()?
         };
         report.pushed = push.ok();
-        push_step(
+        push_git_step(
             &mut report,
             "推送到远端",
-            push.ok(),
-            if push.ok() {
-                "已推送".to_string()
-            } else {
-                first_line(&push.stderr)
-            },
+            &push,
+            "已推送",
             t5.elapsed().as_millis(),
         );
         if push.ok() {

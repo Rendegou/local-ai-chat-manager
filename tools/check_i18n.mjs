@@ -34,7 +34,10 @@ function rustFiles(dir) {
 /** 从 Rust 源码里抽出文案 code。 */
 function codesFromRust() {
   const codes = new Set()
-  // LocalizedText::new("x.y", …) / LocalizedText::with("x.y", …) / SourceNote::plain("x.y", …)
+  // LocalizedText::new("x.y", …) / LocalizedText::with("x.y", …)
+  //
+  // 注意：这里**故意**只认全路径写法。曾经为了少打字把  别名成 ，
+  // 结果这个脚本扫不到那批 code，翻译缺失也检查不出来——别名会把构造点从工具视野里藏起来。
   const literal = /LocalizedText::(?:new|with)\(\s*"([^"]+)"/g
   for (const file of rustFiles(join(ROOT, 'crates/aichat-core/src'))) {
     // serde 属性与静态目录里没有 code，只有这些构造点有

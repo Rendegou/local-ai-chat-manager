@@ -75,6 +75,7 @@ pub fn run() {
             commands::imports::cancel_import,
             commands::imports::save_import_template,
             commands::sources::preview_generic_source,
+            commands::sync::diagnose_remote,
             // 会话与索引
             commands::sessions::detect_sources,
             commands::sessions::list_sources,

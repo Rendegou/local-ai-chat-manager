@@ -1015,6 +1015,84 @@ async function main() {
     }
 
     /* ------------------------------------------------------------------ *
+     * G. 同步失败：原始输出与可执行建议（国内连 GitHub 失败时靠这个定位）
+     * ------------------------------------------------------------------ */
+    {
+      const tab = await openPage(browser, args, { size: '1440x900' }, mock)
+      await goto(tab, '同步')
+      await wait(400)
+
+      // 触发一次同步（mock 里推送到远端是失败的）
+      await clickByText(tab, '立即同步')
+      await wait(900)
+      await clickByText(tab, '展开')
+      await wait(600)
+
+      const afterFail = await tab.evaluate(() => {
+        const main = document.querySelector('main')?.textContent ?? ''
+        return {
+          text: main,
+          // 失败步骤的原始输出默认收起，先看有没有「查看输出」入口
+          hasShowLog: main.includes('查看输出'),
+          pres: [...document.querySelectorAll('main pre')].map((p) => p.textContent ?? ''),
+        }
+      })
+      if (!afterFail.hasShowLog) {
+        fail('[同步失败] 失败步骤没有「查看输出」入口——只给一行摘要没法定位是 DNS/代理/证书/凭据')
+      }
+      // 建议要直接可见，不用展开
+      if (!afterFail.text.includes('可以这样排查')) {
+        fail('[同步失败] 没有给出可执行的排查建议')
+      }
+      if (!afterFail.text.includes('http.proxy')) {
+        fail('[同步失败] 连不上远端的建议里没有具体的代理配置示例')
+      }
+
+      // 展开原始输出：必须能看到是哪条命令、退出码、以及完整 stderr
+      await clickByText(tab, '查看输出')
+      await wait(400)
+      const expanded = await tab.evaluate(() =>
+        [...document.querySelectorAll('main pre')].map((p) => p.textContent ?? ''),
+      )
+      const log = expanded.find((t) => t.includes('退出码')) ?? ''
+      if (!log) {
+        fail('[同步失败] 展开后看不到原始输出')
+      } else {
+        if (!log.includes('$ git ')) fail(`[同步失败] 原始输出没有说明是哪条命令：${log.slice(0, 80)}`)
+        if (!/退出码 \d+/.test(log)) fail('[同步失败] 原始输出没有退出码')
+        if (!log.includes('--- stderr ---')) fail('[同步失败] 原始输出没有分段标出 stderr')
+        if (!log.includes('Failed to connect to github.com port 443')) {
+          fail('[同步失败] 原始输出没有带上完整的原因行')
+        }
+        note('[同步失败] 原始输出含命令行 / 退出码 / stderr 全文')
+      }
+
+      /* ---- 远端连接诊断 ---- */
+      await clickByText(tab, '测试远端连接')
+      await wait(900)
+      const diagnosis = await tab.evaluate(() => {
+        const main = document.querySelector('main')?.textContent ?? ''
+        const pres = [...document.querySelectorAll('main pre')].map((p) => p.textContent ?? '')
+        return { text: main, report: pres.find((t) => t.includes('代理环境变量')) ?? '' }
+      })
+      if (!diagnosis.report) {
+        fail('[远端诊断] 没有显示诊断报告')
+      } else {
+        for (const expected of ['仓库：', '远端：', 'git：', '网络配置：', '代理环境变量：']) {
+          if (!diagnosis.report.includes(expected)) {
+            fail(`[远端诊断] 报告缺少「${expected}」一项`)
+          }
+        }
+      }
+      if (!diagnosis.text.includes('复制诊断信息')) {
+        fail('[远端诊断] 没有「复制诊断信息」按钮（用户要能整段贴出来求助）')
+      }
+      note('[远端诊断] 含仓库/远端/git/网络配置/代理环境变量与一次真实探测')
+
+      await tab.close()
+    }
+
+    /* ------------------------------------------------------------------ *
      * F. 后端文案跟随语言 + Git 日志详情
      * ------------------------------------------------------------------ */
     {

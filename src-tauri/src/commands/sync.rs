@@ -54,6 +54,19 @@ pub fn git_log(state: State<'_, AppState>, limit: Option<usize>) -> CmdResult<Ve
     Ok(state.library.git_log(limit.unwrap_or(30))?)
 }
 
+/// 远端连通性诊断：把「环境 + 一次真实探测」摊开，供用户定位连不上的原因。
+///
+/// 放到 spawn_blocking：探测一次 `git ls-remote` 最长可能等 20 秒（已用
+/// http.lowSpeedTime / connectTimeout 收口），不能占着 UI 线程。
+#[tauri::command]
+pub async fn diagnose_remote(state: State<'_, AppState>) -> CmdResult<aichat_core::sync::RemoteDiagnosis> {
+    let library = state.library.clone();
+    tauri::async_runtime::spawn_blocking(move || library.diagnose_remote())
+        .await
+        .map_err(|e| CommandError::from(aichat_core::Error::config(e.to_string())))?
+        .map_err(CommandError::from)
+}
+
 /// 冲突处理：中止 rebase（不自动合并、不丢弃任何一边）。
 #[tauri::command]
 pub fn abort_rebase(state: State<'_, AppState>) -> CmdResult<()> {

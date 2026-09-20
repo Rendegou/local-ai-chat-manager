@@ -381,10 +381,54 @@ export const PAGE_MOCK = String.raw`
       return result;
     },
     sync_status: () => sync,
+    // 故意让「推送到远端」失败：这是国内最常见的故障，界面必须能给出原始输出与建议
     sync_now: () => ({
-      steps: [], branch: 'main', remote: sync.remote, committed: true, pushed: true, pulled: true,
+      steps: [
+        { name: '打开同步仓库', ok: true, detail: 'D:/AIChatRepo', log: '', durationMs: 12 },
+        { name: '写会话快照', ok: true, detail: '新增/更新 2，未变化 20，失败 0，写入 180 KB', log: '', durationMs: 820 },
+        { name: '提交本地改动', ok: true, detail: '已提交', log: '', durationMs: 140 },
+        {
+          name: '拉取远端（rebase）', ok: false,
+          detail: 'Failed to connect to github.com port 443 after 21000 ms: Timed out',
+          log: '$ git pull --rebase\n退出码 128\n--- stdout ---\n\n--- stderr ---\nfatal: unable to access \'https://github.com/Rendegou/aichat-history.git/\': Failed to connect to github.com port 443 after 21000 ms: Timed out\n',
+          hint: {
+            code: 'sync.hint.connect',
+            fallback: '连不上远端：国内直连 GitHub 经常超时。给 git 配代理后重试（例如 「git config --global http.proxy http://127.0.0.1:7890」），或改用 Gitee 之类的国内仓库。',
+          },
+          durationMs: 21100,
+        },
+        {
+          name: '推送到远端', ok: false,
+          detail: 'Failed to connect to github.com port 443 after 21000 ms: Timed out',
+          log: '$ git push --set-upstream origin main\n退出码 128\n--- stdout ---\n\n--- stderr ---\nfatal: unable to access \'https://github.com/Rendegou/aichat-history.git/\': Failed to connect to github.com port 443 after 21000 ms: Timed out\n',
+          hint: {
+            code: 'sync.hint.connect',
+            fallback: '连不上远端：国内直连 GitHub 经常超时。给 git 配代理后重试（例如 「git config --global http.proxy http://127.0.0.1:7890」），或改用 Gitee 之类的国内仓库。',
+          },
+          durationMs: 20800,
+        },
+      ],
+      branch: 'main', remote: sync.remote, committed: true, pushed: false, pulled: false,
       snapshot: { written: 2, skipped: 20, failed: 0, bytes: 184320, files: [] },
-      conflict: null, durationMs: 3200,
+      conflict: null, durationMs: 43000,
+    }),
+    diagnose_remote: () => ({
+      gitVersion: 'git version 2.48.1.windows.1',
+      repo: 'D:/AIChatRepo',
+      branch: 'main',
+      remote: 'https://github.com/Rendegou/aichat-history.git',
+      netConfig: '',
+      envProxy: 'HTTPS_PROXY=http://127.0.0.1:7890',
+      probe: {
+        code: 128, args: ['ls-remote', '--heads', 'https://github.com/Rendegou/aichat-history.git'],
+        stdout: '',
+        stderr: "fatal: unable to access 'https://github.com/Rendegou/aichat-history.git/': Failed to connect to github.com port 443 after 20000 ms: Timed out\n",
+      },
+      hint: {
+        code: 'sync.hint.connect',
+        fallback: '连不上远端：国内直连 GitHub 经常超时。给 git 配代理后重试（例如 「git config --global http.proxy http://127.0.0.1:7890」），或改用 Gitee 之类的国内仓库。',
+      },
+      report: '仓库：D:/AIChatRepo\n分支：main\n远端：https://github.com/Rendegou/aichat-history.git\ngit：git version 2.48.1.windows.1\n网络配置：（无 http/https/credential 配置）\n代理环境变量：HTTPS_PROXY=http://127.0.0.1:7890\n\n$ git ls-remote --heads https://github.com/Rendegou/aichat-history.git\n退出码 128\n--- stderr ---\nfatal: unable to access \'...\': Failed to connect to github.com port 443 after 20000 ms: Timed out\n\n建议：连不上远端：国内直连 GitHub 经常超时。\n',
     }),
     git_log: () => [
       { hash: 'c0ffee1a', shortHash: 'c0ffee1', author: 'dev', date: '2026-09-19T10:12:00Z', refs: '', subject: '本地改动：整理第九章实验数据', unpushed: true },
@@ -629,6 +673,48 @@ const OVERLAY_SHOTS = [
           ?.click()
       })
       await wait(800)
+    },
+  },
+  {
+    page: 'sync-failure',
+    size: '1180x800',
+    setup: async (tab) => {
+      await gotoPage(tab, '同步')
+      await wait(400)
+      await clickByText(tab, '立即同步')
+      await wait(900)
+      await clickByText(tab, '展开')
+      await wait(600)
+      // 展开两条失败步骤的原始输出
+      for (let i = 0; i < 2; i += 1) {
+        await tab.evaluate(() => {
+          const button = [...document.querySelectorAll('main button')].find(
+            (b) => (b.textContent ?? '').trim() === '查看输出',
+          )
+          button?.click()
+        })
+        await wait(300)
+      }
+    },
+  },
+  {
+    page: 'sync-diagnosis',
+    size: '1180x800',
+    setup: async (tab) => {
+      await gotoPage(tab, '同步')
+      await wait(400)
+      await clickByText(tab, '展开')
+      await wait(600)
+      await clickByText(tab, '测试远端连接')
+      await wait(900)
+      // 定位到诊断报告本身再截图——滚到底会越过它（下面还有数据源清单）
+      await tab.evaluate(() => {
+        const label = [...document.querySelectorAll('main div')].find((d) =>
+          (d.textContent ?? '').startsWith('远端连接诊断'),
+        )
+        label?.scrollIntoView({ block: 'start' })
+      })
+      await wait(400)
     },
   },
   {

@@ -317,11 +317,36 @@ export interface SyncStatus {
   error: string | null
 }
 
+/**
+ * 远端连通性诊断结果（「测试远端连接」）。
+ *
+ * 国内连 GitHub 失败时，光有 stderr 往往不够——用户不知道自己有没有配代理、
+ * 凭据助手是什么。一次把「环境 + 一次真实探测」摊开，`report` 就是可以整段复制出去的内容。
+ */
+export interface RemoteDiagnosis {
+  gitVersion: string
+  repo: string
+  branch: string
+  remote: string | null
+  /** git config 里的 http/https/credential 项（代理与凭据助手） */
+  netConfig: string
+  /** 进程里生效的代理环境变量 */
+  envProxy: string
+  probe: { code: number; stdout: string; stderr: string; args: string[] } | null
+  hint: LocalizedText | null
+  /** 可直接复制给人看的整段诊断文本 */
+  report: string
+}
+
 /** 同步步骤。 */
 export interface SyncStep {
   name: string
   ok: boolean
   detail: string
+  /** 失败时的原始输出（命令行 + 退出码 + stdout/stderr）；成功时为空 */
+  log?: string
+  /** 按 stderr 特征给出的可执行建议 */
+  hint?: LocalizedText | null
   durationMs: number
 }
 

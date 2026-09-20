@@ -67,10 +67,14 @@ pub enum Error {
     #[error("数据库错误: {0}")]
     Database(#[from] rusqlite::Error),
 
-    /// Git 命令错误：保留 stdout / stderr / exit code（规格 §28）
+    /// Git 命令错误：保留命令行、stdout / stderr / exit code（规格 §28）
+    ///
+    /// `args` 是必需的：只说「Git 命令失败」而不说**是哪条命令**，
+    /// 用户看到一堆 stderr 也不知道发生在 pull 还是 push。
     #[error("Git 命令失败 ({code}): {stderr}")]
     Git {
         code: i32,
+        args: Vec<String>,
         stdout: String,
         stderr: String,
     },
@@ -124,12 +128,13 @@ impl Error {
             Error::Adapter(msg) => format!("无法读取会话数据源：{msg}"),
             Error::Parse(msg) => format!("会话文件解析失败：{msg}"),
             Error::Database(_) => "本地索引数据库操作失败，可尝试重建索引".to_string(),
-            Error::Git { stderr, code, .. } => {
-                let hint = stderr.lines().next().unwrap_or("").trim();
+            Error::Git { stderr, code, args, .. } => {
+                let hint = first_cause(stderr);
+                let command = if args.is_empty() { "git".to_string() } else { format!("git {}", args.join(" ")) };
                 if hint.is_empty() {
-                    format!("Git 命令失败（退出码 {code}）")
+                    format!("{command} 失败（退出码 {code}）")
                 } else {
-                    format!("Git 命令失败：{hint}")
+                    format!("{command} 失败：{hint}")
                 }
             }
             Error::Io { path, source } => format!("无法访问 {path}：{source}"),
@@ -232,4 +237,48 @@ impl From<PathBuf> for Error {
     fn from(p: PathBuf) -> Self {
         Error::NotFound(display_path(&p))
     }
+}
+
+/// 从 stderr 里挑出「最像原因」的一行。
+///
+/// 直接取第一行是不够用的：git 的 stderr 开头常是 `fatal: unable to access '...'`
+/// 这类外层包装，真正的原因在后续的行（CURLE 错误、curl 的 `Could not resolve host`、
+/// 证书报错等）。而只显示第一行正是用户反馈「日志不够详细」的直接原因。
+pub fn first_cause(stderr: &str) -> &str {
+    let lines: Vec<&str> = stderr.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+    // 优先挑带原因关键词的行
+    const MARKERS: &[&str] = &[
+        "Could not resolve host",
+        "Failed to connect",
+        "Connection refused",
+        "Connection reset",
+        "Connection timed out",
+        "Operation timed out",
+        "SSL certificate problem",
+        "unable to get local issuer certificate",
+        "server certificate verification failed",
+        "Authentication failed",
+        "could not read Username",
+        "could not read Password",
+        "terminal prompts disabled",
+        "Permission denied",
+        "publickey",
+        "Repository not found",
+        "not found",
+        "RPC failed",
+        "early EOF",
+        "remote end hung up",
+        "index.lock",
+        "diverged",
+        "would be overwritten",
+        "no such remote",
+        "does not appear to be a git repository",
+        "not a git repository",
+    ];
+    for marker in MARKERS {
+        if let Some(line) = lines.iter().find(|l| l.contains(marker)) {
+            return line.trim_start_matches("fatal: ").trim_start_matches("error: ").trim();
+        }
+    }
+    lines.first().copied().unwrap_or("")
 }

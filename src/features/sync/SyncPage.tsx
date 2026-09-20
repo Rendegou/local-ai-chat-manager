@@ -21,7 +21,7 @@ import { useT } from '../../lib/i18n'
 import { useSync } from '../../stores/sync'
 import { useLibrary } from '../../stores/library'
 import { useSourceViews } from '../../lib/sources'
-import type { GitCommit } from '../../types/ipc'
+import type { GitCommit, RemoteDiagnosis } from '../../types/ipc'
 import {
   Button,
   EmptyState,
@@ -64,6 +64,11 @@ export function SyncPage() {
   const [remoteInput, setRemoteInput] = useState('')
   const [log, setLog] = useState<GitCommit[] | null>(null)
   const [logBusy, setLogBusy] = useState(false)
+  const [diagnosis, setDiagnosis] = useState<RemoteDiagnosis | null>(null)
+  const [diagnoseBusy, setDiagnoseBusy] = useState(false)
+  const [copied, setCopied] = useState(false)
+  /** 展开了原始日志的步骤名 */
+  const [openStep, setOpenStep] = useState<string | null>(null)
   const [advancedOpen, setAdvancedOpen] = useState(false)
 
   useEffect(() => {
@@ -194,12 +199,36 @@ export function SyncPage() {
               tone="danger"
               title={error.message}
               actions={
-                <IconButton label={t('sync.dismissError')} size="sm" onClick={clearError}>
-                  <Icon name="close" />
-                </IconButton>
+                <>
+                  <Button
+                    tone="ghost"
+                    size="sm"
+                    onClick={() => {
+                      const text = [
+                        `message: ${error.message}`,
+                        `kind: ${error.kind}`,
+                        `detail: ${error.detail ?? ''}`,
+                        status?.repo ? `repo: ${status.repo}` : '',
+                        status?.remote ? `remote: ${status.remote}` : '',
+                        status?.gitVersion ? `git: ${status.gitVersion}` : '',
+                      ]
+                        .filter(Boolean)
+                        .join('\n')
+                      void navigator.clipboard?.writeText(text)
+                    }}
+                  >
+                    {t('sync.copyError')}
+                  </Button>
+                  <IconButton label={t('sync.dismissError')} size="sm" onClick={clearError}>
+                    <Icon name="close" />
+                  </IconButton>
+                </>
               }
             >
-              {error.detail ?? error.kind}
+              {/* 完整原始输出：git 的错误常常主要信息在第二行（curl 的原因），只显示第一行没法定位 */}
+              <pre className="max-h-40 overflow-auto overscroll-contain text-tech leading-5 text-ink-muted whitespace-pre-wrap [overflow-wrap:anywhere]">
+                {(error.detail ?? error.kind).trim()}
+              </pre>
             </Notice>
           ) : null}
 
@@ -356,21 +385,50 @@ export function SyncPage() {
               {report ? (
                 <Section title={t('sync.reportTitle')} description={t('sync.reportDuration', { ms: report.durationMs })}>
                   {report.steps.map((step) => (
-                    <ListRow
-                      key={step.name}
-                      leading={
-                        <StatusPill size="sm" tone={step.ok ? 'success' : 'danger'}>
-                          {step.ok ? t('sync.stepOk') : t('sync.stepFailed')}
-                        </StatusPill>
-                      }
-                      title={step.name}
-                      subtitle={step.detail}
-                      trailing={
-                        <span className="text-meta tabular-nums text-ink-muted">
-                          {formatDuration(step.durationMs)}
-                        </span>
-                      }
-                    />
+                    <div key={step.name} className="border-b border-line-subtle last:border-b-0">
+                      <ListRow
+                        leading={
+                          <StatusPill size="sm" tone={step.ok ? 'success' : 'danger'}>
+                            {step.ok ? t('sync.stepOk') : t('sync.stepFailed')}
+                          </StatusPill>
+                        }
+                        title={step.name}
+                        subtitle={step.detail}
+                        trailing={
+                          <>
+                            {step.log ? (
+                              <Button
+                                tone="ghost"
+                                size="sm"
+                                aria-expanded={openStep === step.name}
+                                onClick={() => setOpenStep(openStep === step.name ? null : step.name)}
+                              >
+                                {openStep === step.name ? t('sync.hideLog') : t('sync.showLog')}
+                              </Button>
+                            ) : null}
+                            <span className="text-meta tabular-nums text-ink-muted">
+                              {formatDuration(step.durationMs)}
+                            </span>
+                          </>
+                        }
+                      />
+                      {/* 失败步骤：原始输出 + 可执行建议。只给一行摘要没法定位
+                          到底是 DNS、代理、证书还是凭据（国内连 GitHub 的常见坑）。 */}
+                      {step.log && openStep === step.name ? (
+                        <div className="pb-2">
+                          <pre className="max-h-56 overflow-auto overscroll-contain rounded-control bg-term p-2 text-tech leading-5 text-ink-muted whitespace-pre-wrap [overflow-wrap:anywhere]">
+                            {step.log.trim()}
+                          </pre>
+                        </div>
+                      ) : null}
+                      {step.hint ? (
+                        <div className="pb-2">
+                          <Notice tone="warning" title={t('sync.hintTitle')}>
+                            {t.text(step.hint)}
+                          </Notice>
+                        </div>
+                      ) : null}
+                    </div>
                   ))}
                   {report.snapshot.written > 0 ? (
                     <div>
@@ -473,6 +531,65 @@ export function SyncPage() {
                         </div>
                       </div>
                     ) : null}
+
+                    <div>
+                      <div className="flex items-center justify-between pb-1">
+                        <span className="text-body text-ink">{t('sync.diagnoseTitle')}</span>
+                        <Button
+                          tone="ghost"
+                          size="sm"
+                          loading={diagnoseBusy}
+                          disabled={!repoConfigured}
+                          onClick={() => {
+                            setDiagnoseBusy(true)
+                            void ipc
+                              .diagnoseRemote()
+                              .then(setDiagnosis)
+                              .finally(() => setDiagnoseBusy(false))
+                          }}
+                        >
+                          {t('sync.diagnoseRun')}
+                        </Button>
+                      </div>
+                      <p className="pb-1 text-meta text-ink-muted">{t('sync.diagnoseDesc')}</p>
+                      {diagnosis ? (
+                        <div className="flex flex-col gap-2 border-t border-line-subtle pt-2">
+                          <Field label={t('sync.fieldRemote')} mono>
+                            {diagnosis.remote ?? t('sync.notConfigured')}
+                          </Field>
+                          <Field label="git" mono>
+                            {diagnosis.gitVersion || t('sync.noGit')}
+                          </Field>
+                          <Field label={t('sync.diagnoseNetConfig')} mono>
+                            {diagnosis.netConfig || t('sync.diagnoseNetConfigEmpty')}
+                          </Field>
+                          <Field label={t('sync.diagnoseEnvProxy')} mono>
+                            {diagnosis.envProxy || t('sync.diagnoseEnvProxyEmpty')}
+                          </Field>
+                          {diagnosis.hint ? (
+                            <Notice tone="warning" title={t('sync.hintTitle')}>
+                              {t.text(diagnosis.hint)}
+                            </Notice>
+                          ) : null}
+                          <pre className="max-h-64 overflow-auto overscroll-contain rounded-control bg-term p-2 text-tech leading-5 text-ink-muted whitespace-pre-wrap [overflow-wrap:anywhere]">
+                            {diagnosis.report.trim()}
+                          </pre>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                void navigator.clipboard?.writeText(diagnosis.report).then(() => {
+                                  setCopied(true)
+                                  window.setTimeout(() => setCopied(false), 1600)
+                                })
+                              }}
+                            >
+                              {copied ? t('sync.copied') : t('sync.copyDiagnosis')}
+                            </Button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
 
                     <div>
                       <div className="flex items-center justify-between pb-1">
