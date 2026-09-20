@@ -64,15 +64,23 @@ jobs:
       - name: 构建安装包
         run: npm run tauri:build -- ${{ matrix.args }}
         env:
-          # ad-hoc 签名（伪身份 "-"）。没有它时 .app 完全没有签名（只有链接器给
-          # arm64 二进制加的那一份），下载后 Gatekeeper 报「已损坏，无法打开」。
-          # 配好 Apple 证书后把这些 secret 填上即自动切换为正式签名 + 公证。
+          # ad-hoc 签名（伪身份 "-"）：没有 Apple 证书时也让 .app 处于「已签名」状态，
+          # 否则下载后 Gatekeeper 报「已损坏，无法打开」。
+          #
+          # 注意：这里**不能**顺手写上 APPLE_CERTIFICATE / APPLE_ID 之类的未配置 secret。
+          # GitHub 会把未配置的 secret 传成空字符串，Tauri 看到变量存在就当成「有证书」，
+          # 去执行 security import 然后失败（实测：failed to import keychain certificate）。
+          # 将来真配了 Apple 开发者证书，再单独加一步，只在有值时注入：
+          #   if: runner.os == 'macOS' && secrets.APPLE_CERTIFICATE != ''
+          #   run: |
+          #     {
+          #       echo "APPLE_CERTIFICATE=${{ secrets.APPLE_CERTIFICATE }}"
+          #       echo "APPLE_CERTIFICATE_PASSWORD=${{ secrets.APPLE_CERTIFICATE_PASSWORD }}"
+          #       echo "APPLE_ID=${{ secrets.APPLE_ID }}"
+          #       echo "APPLE_PASSWORD=${{ secrets.APPLE_PASSWORD }}"
+          #       echo "APPLE_TEAM_ID=${{ secrets.APPLE_TEAM_ID }}"
+          #     } >> "$GITHUB_ENV"
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY || '-' }}
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: 校验 macOS 产物
         if: runner.os == 'macOS'
