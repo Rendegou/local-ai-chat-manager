@@ -195,20 +195,34 @@ jobs:
           else
             NOTES=(--generate-notes)
           fi
+
+          # download-artifact 会保留 artifact 内部的相对路径（dist/msi/x.msi 这种），
+          # 先拍平再操作 —— 否则会拿目录名去比资产名，把该留的包当成「过期产物」删掉
+          mkdir -p out
+          find dist -type f | while IFS= read -r f; do cp "$f" out/; done
+          COUNT=$(find out -type f | wc -l | tr -d ' ')
+          if [ "$COUNT" -lt 2 ]; then
+            echo "::error::待发布产物只有 ${COUNT} 个，中止（不动 Release 上已有的资产）"
+            ls -lR dist
+            exit 1
+          fi
+          ls -lh out
+
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release $TAG 已存在：刷新说明并覆盖产物"
             gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TITLE" "${NOTES[@]}"
-            # 清掉已经不再产出的旧产物（例如 v0.4.2 那个只有 arm64 的坏 dmg），
-            # 否则它会和新包一起挂在 Release 上，用户很可能下错。
-            want=$(cd dist && ls | tr ' ' '.')
+            # 先上传再清理：万一上传失败，Release 上原来的资产还在
+            gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber out/*
+            # 清掉本次不再产出的旧包（例如 v0.4.2 那个只有 arm64 的坏 dmg），
+            # 否则它会和新包一起挂在 Release 上，用户很可能下错
+            want=$(cd out && ls | tr ' ' '.')
             for name in $(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name'); do
               if ! printf '%s\n' "$want" | grep -qxF "$name"; then
                 echo "删除过期产物：$name"
                 gh release delete-asset "$TAG" "$name" --repo "$GITHUB_REPOSITORY" --yes
               fi
             done
-            gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber dist/*
           else
-            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TITLE" "${NOTES[@]}" dist/*
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TITLE" "${NOTES[@]}" out/*
           fi
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url --jq .url
