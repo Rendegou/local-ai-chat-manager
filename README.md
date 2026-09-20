@@ -4,9 +4,9 @@
 
 **中文** | [English](#english)
 
-> 当前版本：**0.4.0 Beta**。Windows 已完成主要功能验证；macOS 和 Linux 尚未进行真机测试。
+> 当前版本：**0.4.1 Beta**。Windows 已完成主要功能验证；macOS 和 Linux 尚未进行真机测试。
 >
-> Current version: **0.4.0 Beta**. Main workflows verified on Windows; macOS and Linux have not been tested on real hardware yet.
+> Current version: **0.4.1 Beta**. Main workflows verified on Windows; macOS and Linux have not been tested on real hardware yet.
 
 技术栈：Tauri 2、Rust、React、TypeScript、SQLite FTS5。
 Tech stack: Tauri 2, Rust, React, TypeScript, SQLite FTS5.
