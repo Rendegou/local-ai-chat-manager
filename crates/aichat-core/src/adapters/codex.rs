@@ -29,6 +29,7 @@ use crate::adapters::{
     cap_metadata, cap_text, message_id, usable_root, AdapterContext, ConversationAdapter,
     DupFilter, MessageSink,
 };
+use crate::localized::{LocalizedText, SourceNote};
 use crate::error::Result;
 use crate::model::{
     DetectionResult, MessageKind, NormalizedMessage, ParsedSessionInfo, RawFileRef, Role,
@@ -142,20 +143,24 @@ impl ConversationAdapter for CodexAdapter {
                     .unwrap_or(false);
                 let mut notes = Vec::new();
                 if is_manual {
-                    notes.push("使用设置中手工指定的目录".to_string());
+                    notes.push(SourceNote::info(LocalizedText::new("source.note.manualDir", "使用设置中手工指定的目录")));
                 } else if std::env::var_os("CODEX_HOME").is_some() {
-                    notes.push("来自环境变量 CODEX_HOME".to_string());
+                    notes.push(SourceNote::info(LocalizedText::with(
+                        "source.note.envVar", "name", "CODEX_HOME", "来自环境变量 CODEX_HOME",
+                    )));
                 } else {
-                    notes.push(format!(
-                        "自动探测目录 {}",
-                        crate::error::display_path(&root)
-                    ));
+                    notes.push(SourceNote::info(LocalizedText::with(
+                        "source.note.autoDetected",
+                        "path",
+                        crate::error::display_path(&root),
+                        format!("自动探测目录 {}", crate::error::display_path(&root)),
+                    )));
                 }
                 let rollouts = collect_rollouts(&root);
                 if rollouts.is_empty() {
-                    notes.push(
-                        "未发现 rollout-*.jsonl（可在设置中指定 Codex 数据目录）".to_string(),
-                    );
+                    notes.push(SourceNote::warn(LocalizedText::new(
+                        "source.note.noRollout", "未发现 rollout-*.jsonl（可在设置中指定 Codex 数据目录）",
+                    )));
                 }
                 vec![DetectionResult {
                     source: SourceKind::Codex,
@@ -168,7 +173,9 @@ impl ConversationAdapter for CodexAdapter {
             }
             None => vec![DetectionResult::missing(
                 SourceKind::Codex,
-                "未找到 Codex 数据目录（可用 CODEX_HOME 或设置项指定）",
+                SourceNote::error(LocalizedText::new(
+                    "source.codex.missingDir", "未找到 Codex 数据目录（可用 CODEX_HOME 或设置项指定）",
+                )),
             )],
         }
     }

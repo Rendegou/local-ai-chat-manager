@@ -1015,6 +1015,99 @@ async function main() {
     }
 
     /* ------------------------------------------------------------------ *
+     * F. 后端文案跟随语言 + Git 日志详情
+     * ------------------------------------------------------------------ */
+    {
+      const tab = await openPage(browser, args, { size: '1440x900' }, mock)
+      await goto(tab, '同步')
+      // 高级区域里有数据源清单（探测说明来自后端）
+      await clickByText(tab, '展开')
+      await wait(500)
+
+      const zhView = await tab.evaluate(() => {
+        const main = document.querySelector('main')?.textContent ?? ''
+        return { text: main }
+      })
+      if (!zhView.text.includes('尚未适配')) {
+        fail('[i18n] 中文界面里没看到后端的来源说明，断言无法继续')
+      }
+
+      // 切到英文：后端发来的说明也必须跟着变
+      await tab.evaluate(() => {
+        const trigger = [...document.querySelectorAll('button')].find((b) =>
+          (b.getAttribute('aria-label') ?? '').startsWith('更多操作'),
+        )
+        trigger?.focus()
+        trigger?.click()
+      })
+      await wait(400)
+      await tab.evaluate(() => {
+        ;[...document.querySelectorAll('[role="menuitemradio"]')]
+          .find((r) => r.textContent?.trim() === 'English')
+          ?.click()
+      })
+      await wait(600)
+
+      const enView = await tab.evaluate(() => ({
+        lang: document.documentElement.lang,
+        text: document.querySelector('main')?.textContent ?? '',
+      }))
+      if (enView.lang !== 'en') fail(`[i18n] 切英文后 html lang 仍是 ${enView.lang}`)
+      // 后端文案的英文：说明与「未找到」都不能还是中文
+      if (!enView.text.includes('Not adapted yet')) {
+        fail('[i18n] 后端来源说明没有跟着切到英文（仍然是中文原文）')
+      }
+      if (enView.text.includes('尚未适配')) {
+        fail('[i18n] 英文界面里仍出现后端的中文说明：尚未适配')
+      }
+      if (enView.text.includes('未找到')) {
+        fail('[i18n] 英文界面里仍出现后端的中文说明：未找到')
+      }
+
+      /* ---- Git 日志：结构化 + 详情 + 未推送标记 ---- */
+      await clickByText(tab, 'Read recent commits')
+      await wait(600)
+      const gitLog = await tab.evaluate(() => {
+        const main = document.querySelector('main')?.textContent ?? ''
+        return {
+          text: main,
+          // 旧实现是一整段 <pre>；新实现每条提交一个块
+          hasPre: Boolean(document.querySelector('main pre')),
+          authors: (main.match(/\bdev\b/g) ?? []).length,
+        }
+      })
+      if (gitLog.hasPre) fail('[Git 日志] 仍是整段 <pre> 文本，没有换成结构化的提交列表')
+      if (gitLog.authors < 2) {
+        fail(`[Git 日志] 没有显示作者（旧实现丢了这个信息）：dev 出现 ${gitLog.authors} 次`)
+      }
+      if (!/20\d\d/.test(gitLog.text)) fail('[Git 日志] 没有显示提交时间')
+      if (!gitLog.text.includes('origin/main')) {
+        fail('[Git 日志] 没有显示分支/tag 装饰（refs）')
+      }
+      if (!gitLog.text.includes('Not pushed')) {
+        fail('[Git 日志] 没有标记哪些提交还没推送')
+      }
+      note(`[Git 日志] 结构化提交列表，含作者/时间/refs/未推送标记，已无 <pre> 整段文本`)
+
+      // 切回中文，避免影响后续断言
+      await tab.evaluate(() => {
+        const trigger = [...document.querySelectorAll('button')].find((b) =>
+          (b.getAttribute('aria-label') ?? '').startsWith('More actions'),
+        )
+        trigger?.focus()
+        trigger?.click()
+      })
+      await wait(400)
+      await tab.evaluate(() => {
+        ;[...document.querySelectorAll('[role="menuitemradio"]')]
+          .find((r) => r.textContent?.trim() === '中文')
+          ?.click()
+      })
+      await wait(400)
+      await tab.close()
+    }
+
+    /* ------------------------------------------------------------------ *
      * C3. skip link 可聚焦并跳到 main
      * ------------------------------------------------------------------ */
     {

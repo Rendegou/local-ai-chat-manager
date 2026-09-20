@@ -330,7 +330,10 @@ export const PAGE_MOCK = String.raw`
     detect_sources: () => sourceRows,
     list_sources: () => sourceRows,
     // 数据源目录（来源注册表）：8 个产品支持的来源，本机只发现其中一部分
-    source_catalog: () => sourceCatalog,
+    source_catalog: () => sourceCatalog.map((s) => ({
+      ...s,
+      descriptionCode: 'source.' + s.id + '.description',
+    })),
     // 事件订阅：返回一个 no-op 反注册函数（真实后端返回 UnlistenFn）
     'plugin:event|listen': () => () => {},
     list_sessions: (a) => (emptyState ? [] : byFilter(a.filter))
@@ -383,7 +386,12 @@ export const PAGE_MOCK = String.raw`
       snapshot: { written: 2, skipped: 20, failed: 0, bytes: 184320, files: [] },
       conflict: null, durationMs: 3200,
     }),
-    git_log: () => mock.gitLog,
+    git_log: () => [
+      { hash: 'c0ffee1a', shortHash: 'c0ffee1', author: 'dev', date: '2026-09-19T10:12:00Z', refs: '', subject: '本地改动：整理第九章实验数据', unpushed: true },
+      { hash: 'c0ffee2b', shortHash: 'c0ffee2', author: 'dev', date: '2026-09-18T21:40:00Z', refs: '', subject: '本地改动：补充集成测试', unpushed: true },
+      { hash: 'beef1234', shortHash: 'beef123', author: 'dev', date: '2026-09-18T09:05:00Z', refs: 'HEAD -> main, origin/main', subject: 'sync: 写入 2 个会话快照', unpushed: false },
+      { hash: 'beef5678', shortHash: 'beef567', author: 'dev', date: '2026-09-17T18:22:00Z', refs: 'origin/main', subject: 'sync: 首次推送仓库', unpushed: false },
+    ],
     abort_rebase: () => null,
     archive_sessions: () => ({ archived: 1, failed: 0, bytesIn: 0, bytesOut: 184320, entries: [], warnings: [] }),
     archive_old_sessions: () => ({ archived: 0, failed: 0, bytesIn: 0, bytesOut: 0, entries: [], warnings: [] }),

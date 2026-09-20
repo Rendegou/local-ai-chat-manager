@@ -17,6 +17,7 @@
     "ui:shots": "node tools/ui_shot.mjs --out .ui-shots/after-refactor",
     "ui:shots:latest": "node tools/ui_shot.mjs --out .ui-shots/latest",
     "ui:qa": "node tools/ui_qa.mjs",
+    "i18n:check": "node tools/check_i18n.mjs",
     "ui:a11y": "node tools/ui_shot.mjs --out .ui-shots/a11y --pages conversations,search,sync,settings --a11y true"
   },
   "dependencies": {

@@ -22,7 +22,14 @@
 import { useMemo } from 'react'
 
 import { useLibrary } from '../stores/library'
-import type { AppSettings, SourceConfig, SourceDefinition, SourceRow } from '../types/ipc'
+import type {
+  AppSettings,
+  LocalizedText,
+  SourceNote,
+  SourceConfig,
+  SourceDefinition,
+  SourceRow,
+} from '../types/ipc'
 
 /** 来源状态：与后端 `SourceCatalogEntry.status` 同构。 */
 export type SourceStatus = 'available' | 'missing' | 'partial' | 'error'
@@ -49,10 +56,12 @@ export interface SourceView {
   rootPath: string | null
   /** 索引中的会话数 */
   sessionCount: number
-  /** 后端给的人话说明（仅在来源真的存在时有意义） */
+  /** 后端给的中文说明（旧数据 / 日志用） */
   notes: string | null
-  /** 来源识别用的静态说明（Catalog），用于「添加来源」候选列表 */
-  description: string
+  /** 结构化探测说明：按 code 翻译后展示 */
+  notesText: SourceNote[]
+  /** 来源识别用的静态说明（Catalog），用于「添加来源」候选列表；展示时按 code 翻译 */
+  description: LocalizedText
   /** 是否在会话页来源栏显示 */
   visibleInSidebar: boolean
   /** 是否在搜索页来源筛选中显示 */
@@ -115,7 +124,11 @@ export function buildSourceViews(
       rootPath: row?.rootPath ?? configuredPath,
       sessionCount: row?.sessionHint ?? 0,
       notes: found ? (row?.notes ?? null) : null,
-      description: definition?.description ?? '',
+      notesText: found ? (row?.notesText ?? []) : [],
+      description: {
+        code: definition?.descriptionCode ?? '',
+        fallback: definition?.description ?? '',
+      },
       // 产品支持但本机没有 → 不进任何常驻界面，只出现在「添加来源」候选里
       visibleInSidebar: found || configured || hasHistory,
       // 没有历史就搜不到东西，列出来只会让用户选中一个必然零结果的筛选

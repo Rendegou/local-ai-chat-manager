@@ -21,6 +21,7 @@ use crate::adapters::{
     cap_metadata, message_id, usable_root, AdapterContext, ConversationAdapter, DupFilter,
     MessageSink,
 };
+use crate::localized::{LocalizedText, SourceNote};
 use crate::error::Result;
 use crate::model::{
     DetectionResult, MessageKind, NormalizedMessage, ParsedSessionInfo, RawFileRef, Role,
@@ -84,9 +85,14 @@ impl ConversationAdapter for SyncRepoAdapter {
                 found: true,
                 root: Some(dir),
                 session_hint: hint,
-                notes: vec![format!(
-                    "同步仓库：{machines} 台机器的 {} 会话",
-                    source.display_name()
+                notes: vec![SourceNote::info(
+                    LocalizedText::with(
+                        "source.note.repoMachines",
+                        "machines",
+                        machines.to_string(),
+                        format!("同步仓库：{machines} 台机器的 {} 会话", source.display_name()),
+                    )
+                    .param("sessions", source.display_name()),
                 )],
                 manual: true,
             });

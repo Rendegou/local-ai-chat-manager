@@ -23,6 +23,7 @@ use crate::model::{
     DetectionResult, MessageKind, ParsedSessionInfo, RawFileRef, Role, SessionDescriptor, SourceKind,
 };
 use crate::parser::jsonl::{stream_jsonl, Flow, ParseLimits};
+use crate::localized::{LocalizedText, SourceNote};
 use crate::settings::FieldMapping;
 use crate::{paths, Error, Result};
 
@@ -422,7 +423,12 @@ impl ConversationAdapter for GenericJsonAdapter {
                 found: false,
                 root: None,
                 session_hint: 0,
-                notes: vec![format!("目录不存在或不可读：{}", self.root.display())],
+                notes: vec![SourceNote::error(LocalizedText::with(
+                    "source.note.dirMissing",
+                    "path",
+                    self.root.display().to_string(),
+                    format!("目录不存在或不可读：{}", self.root.display()),
+                ))],
                 manual: true,
             }];
         }
@@ -433,10 +439,12 @@ impl ConversationAdapter for GenericJsonAdapter {
             root: Some(self.root.clone()),
             session_hint: hint,
             notes: if hint == 0 {
-                vec![format!(
-                    "目录里没有匹配 {} 的文件",
-                    self.watch_extensions().join(" / ")
-                )]
+                vec![SourceNote::warn(LocalizedText::with(
+                    "source.note.noMatchingFiles",
+                    "extensions",
+                    self.watch_extensions().join(" / "),
+                    format!("目录里没有匹配 {} 的文件", self.watch_extensions().join(" / ")),
+                ))]
             } else {
                 Vec::new()
             },

@@ -318,7 +318,11 @@ fn 冲突时不自动合并且可中止_rebase() {
     let status_after = machine_b.library.sync_status().unwrap();
     assert!(status_after.conflict.is_none());
     // 本地提交仍在历史里
-    assert!(git_b2.log_oneline(5).unwrap().contains("机器 B 本地改动"));
+    assert!(git_b2
+        .log_commits(5)
+        .unwrap()
+        .iter()
+        .any(|c| c.subject.contains("机器 B 本地改动")));
 }
 
 #[test]
@@ -356,5 +360,9 @@ fn 设置里保存的远端地址会被自动使用() {
 
     // 远端确实收到了提交
     let git_bare = GitRepo::new(&bare, "git");
-    assert!(git_bare.log_oneline(5).unwrap().contains("sync:"));
+    assert!(git_bare
+        .log_commits(5)
+        .unwrap()
+        .iter()
+        .any(|c| c.subject.starts_with("sync:")));
 }

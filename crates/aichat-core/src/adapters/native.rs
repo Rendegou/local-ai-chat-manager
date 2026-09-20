@@ -2,6 +2,7 @@
 use std::path::{Path, PathBuf};
 use serde_json::{json, Value};
 use super::{AdapterContext, ConversationAdapter, MessageSink, cap_raw, cap_text};
+use crate::localized::{LocalizedText, SourceNote};
 use crate::{Result, Error, paths};
 use crate::model::*;
 use crate::parser::jsonl::{stream_jsonl, ParseLimits, Flow};
@@ -34,7 +35,14 @@ impl ConversationAdapter for NativeAdapter {
     fn detect(&self, ctx: &AdapterContext<'_>) -> Vec<DetectionResult> {
         let root = self.root(ctx);
         let count = self.scan(ctx).map(|v| v.len());
-        let (found, hint, notes) = match count { Ok(n) => (n > 0, n, vec![]), Err(_) => (false, 0, vec!["读取失败：请检查目录与权限".into()]) };
+        let (found, hint, notes) = match count {
+            Ok(n) => (n > 0, n, vec![]),
+            Err(_) => (
+                false,
+                0,
+                vec![SourceNote::error(LocalizedText::new("source.note.readFailed", "读取失败：请检查目录与权限"))],
+            ),
+        };
         vec![DetectionResult { source: self.source.clone(), found, root: root.is_dir().then_some(root), session_hint: hint, notes, manual: ctx.settings.source_root(self.id()).is_some() }]
     }
     fn scan(&self, ctx: &AdapterContext<'_>) -> Result<Vec<SessionDescriptor>> {

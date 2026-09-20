@@ -23,6 +23,7 @@ use crate::adapters::{
     cap_metadata, cap_text, message_id, usable_root, AdapterContext, ConversationAdapter,
     DupFilter, MessageSink,
 };
+use crate::localized::{LocalizedText, SourceNote};
 use crate::error::{Error, Result};
 use crate::model::{
     DetectionResult, MessageKind, NormalizedMessage, ParsedSessionInfo, RawFileRef, Role,
@@ -77,16 +78,18 @@ impl ConversationAdapter for ZcodeAdapter {
                     .unwrap_or(false);
                 let mut notes = Vec::new();
                 if is_manual {
-                    notes.push("使用设置中手工指定的目录".to_string());
+                    notes.push(SourceNote::info(LocalizedText::new("source.note.manualDir", "使用设置中手工指定的目录")));
                 } else {
-                    notes.push(format!(
-                        "自动探测目录 {}",
-                        crate::error::display_path(&root)
-                    ));
+                    notes.push(SourceNote::info(LocalizedText::with(
+                        "source.note.autoDetected",
+                        "path",
+                        crate::error::display_path(&root),
+                        format!("自动探测目录 {}", crate::error::display_path(&root)),
+                    )));
                 }
                 let files = collect_session_files(&root);
                 if files.is_empty() {
-                    notes.push("未发现 <目录>/<taskId>.json 会话文件".to_string());
+                    notes.push(SourceNote::warn(LocalizedText::new("source.note.noSessionFiles", "未发现 <目录>/<taskId>.json 会话文件")));
                 }
                 vec![DetectionResult {
                     source: SourceKind::Zcode,
@@ -99,7 +102,9 @@ impl ConversationAdapter for ZcodeAdapter {
             }
             None => vec![DetectionResult::missing(
                 SourceKind::Zcode,
-                "未找到 ZCode 会话目录（~/.zcode/v2/sessions，可在设置中指定）",
+                SourceNote::error(LocalizedText::new(
+                    "source.zcode.missingDir", "未找到 ZCode 会话目录（~/.zcode/v2/sessions，可在设置中指定）",
+                )),
             )],
         }
     }

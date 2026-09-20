@@ -50,7 +50,7 @@ pub async fn sync_now(
 
 /// 查看 Git 日志。
 #[tauri::command]
-pub fn git_log(state: State<'_, AppState>, limit: Option<usize>) -> CmdResult<String> {
+pub fn git_log(state: State<'_, AppState>, limit: Option<usize>) -> CmdResult<Vec<aichat_core::sync::git::GitCommit>> {
     Ok(state.library.git_log(limit.unwrap_or(30))?)
 }
 

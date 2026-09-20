@@ -2,6 +2,46 @@
  * 中文字典：所有 value 必须与改动前界面上的原文完全一致（截图 QA 依赖这些文案定位元素）。
  */
 export const zh = {
+  /**
+   * 后端发来的可翻译文案（code 来自 Rust 的 LocalizedText）。
+   * 命名看清来源：source.* 是数据源探测，error.* 是错误。
+   */
+  backend: {
+    'source.note.manualDir': '使用设置中手工指定的目录',
+    'source.note.envVar': '来自环境变量 {name}',
+    'source.note.autoDetected': '自动探测目录 {path}',
+    'source.note.defaultDir': '默认目录 {path}',
+    'source.note.readFailed': '读取失败：请检查目录与权限',
+    'source.note.dirMissing': '目录不存在或不可读：{path}',
+    'source.note.noMatchingFiles': '目录里没有匹配 {extensions} 的文件',
+    'source.note.importedCopy': '应用管理的导入副本',
+    'source.note.repoMachines': '同步仓库：{machines} 台机器的 {sessions} 会话',
+    'source.codex.missingDir': '未找到 Codex 数据目录（可用 CODEX_HOME 或设置项指定）',
+    'source.kimi.missingDir': '未找到 Kimi Code 数据目录（可用 KIMI_CODE_HOME 或设置项指定）',
+    'source.cursor.missingDir': '未找到 Cursor 数据目录（%APPDATA%/Cursor/User/globalStorage，可在设置中指定）',
+    'source.zcode.missingDir': '未找到 ZCode 会话目录（~/.zcode/v2/sessions，可在设置中指定）',
+    'source.note.noRollout': '未发现 rollout-*.jsonl（可在设置中指定 Codex 数据目录）',
+    'source.note.noSessionIndex': '未找到 session_index.jsonl，将通过目录遍历发现会话',
+    'source.note.noSessionsInDir': '该目录下未发现会话（sessions/<工作目录>/<会话>/agents/main/wire.jsonl）',
+    'source.note.notCursorDb': 'state.vscdb 中没有 composerHeaders 表，可能不是 Cursor 数据',
+    'source.note.dbOpenFailed': 'state.vscdb 只读打开失败（文件可能被占用或已损坏）',
+    'source.note.noSessionFiles': '未发现 <目录>/<taskId>.json 会话文件',
+    'source.note.workbuddyFormat': '已验证 Windows WorkBuddyExtension 历史格式；其他版本需验证',
+    'source.note.workbuddyIndexFailed': '会话摘要库读取失败（占用或损坏）',
+    'source.note.workbuddyScanFailed': '正文目录读取失败',
+    'source.note.workbuddyIndexOnly': '仅发现索引，正文未适配',
+    'source.codex.description': 'Codex 数据目录，留空自动发现',
+    'source.kimi.description': 'Kimi Code 数据目录，留空自动发现',
+    'source.cursor.description': 'globalStorage 目录（state.vscdb）',
+    'source.zcode.description': 'ZCode v2/sessions 目录',
+    'source.claude.description': '~/.claude/projects 项目历史目录',
+    'source.gemini.description': '~/.gemini/tmp 项目历史目录',
+    'source.workbuddy.description': 'WorkBuddy 应用数据目录；按检测结果显示正文支持程度',
+    'source.doubao-work.description': '仅支持标准格式手动导入；自动采集待适配',
+    'source.cline.description': '尚未适配。常见位置：VS Code globalStorage 的 saoudrizwan.claude-dev/tasks（未在本机验证）',
+    'source.continue.description': '尚未适配。常见位置：~/.continue/sessions（未在本机验证）',
+    'source.aider.description': '尚未适配。常见位置：项目目录下的 .aider.chat.history.md（未在本机验证）',
+  },
   common: {
     close: '关闭',
     closeTitle: '关闭{title}',
@@ -229,6 +269,7 @@ export const zh = {
     stepFailed: '失败',
     snapshotSummary: '本次写入 {n} 个会话目录，共 {bytes}',
     snapshotTotal: '… 共 {n} 个会话目录',
+    commitUnpushed: '未推送',
     advancedTitle: '归档与高级诊断',
     advancedDesc: '归档历史会话、查看未提交文件、Git 日志与数据源',
     collapse: '收起',

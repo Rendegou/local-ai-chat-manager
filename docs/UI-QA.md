@@ -83,6 +83,20 @@ node tools/gallery_shot.mjs --out .ui-shots/gallery
 - 固定栏宽用 px（`w-[224px]`）而不是 rem（`w-56`）：仅文字放大时 rem 会翻倍，栏宽失衡；
 - 阅读区需要 `overflow-hidden` + `min-w-0`：否则其固有内容宽度会参与整页布局计算。
 
+## 后端文案的翻译一致性
+
+Rust 那边的用户可见文案（数据源说明、探测结果）现在只说「这是哪一条」+ 参数，
+翻译只在前端字典里。这种两边靠约定对齐的结构最容易出的错是**加了 code 忘了翻译**，
+所以有一条可以跑的断言：
+
+```bash
+npm run i18n:check
+```
+
+它比对三件事：Rust 里出现的每个 code 在 zh/en 字典里都有；由 id 推导的
+`source.<id>.description` 每个 catalog 来源都有；字典里没有已经没人用的孤儿条目。
+新增数据源或错误时忘了补翻译，会在验证阶段被抓住，而不是等用户切语言时才发现。
+
 ## 真机验证（不做坐标点击）
 
 `tools/desktop_shot.py --drawer-at/--detail-at` 靠坐标，而坐标要从显示器缩放反推，算错一次就点到别的控件上。

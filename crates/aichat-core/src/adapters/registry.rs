@@ -55,6 +55,9 @@ const fn definition(id: &'static str, display_name: &'static str, access: &'stat
 #[serde(rename_all = "camelCase")]
 pub struct SourceCatalogEntry {
     #[serde(flatten)] pub definition: SourceDefinition,
+    /// 描述文案的翻译 key（形如 `source.codex.description`）。
+    /// 由 id 推导而不是写进 catalog，加一条来源时不必再手写一个 key。
+    pub description_code: String,
     pub status: String,
     pub enabled: bool,
     pub notes: Option<String>,

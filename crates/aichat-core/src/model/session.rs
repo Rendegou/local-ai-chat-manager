@@ -69,21 +69,25 @@ pub struct DetectionResult {
     pub root: Option<PathBuf>,
     /// 预估会话数量（只读目录元数据，不解析内容）
     pub session_hint: usize,
-    /// 探测说明（含回退原因、被忽略的目录等）
-    pub notes: Vec<String>,
+    /// 探测说明（含回退原因、被忽略的目录等）。
+    ///
+    /// 带 code 的结构化文案：前端按 code 翻译，`severity` 同时取代了
+    /// 过去「拿中文字符串做 `contains` 判断来源状态」的做法。
+    #[serde(default)]
+    pub notes: Vec<crate::localized::SourceNote>,
     /// 是否来自用户手工配置
     pub manual: bool,
 }
 
 impl DetectionResult {
-    /// 未找到数据源。
-    pub fn missing(source: SourceKind, note: impl Into<String>) -> Self {
+    /// 未找到数据源。`note` 带上稳定的 code，前端据此翻译。
+    pub fn missing(source: SourceKind, note: crate::localized::SourceNote) -> Self {
         DetectionResult {
             source,
             found: false,
             root: None,
             session_hint: 0,
-            notes: vec![note.into()],
+            notes: vec![note],
             manual: false,
         }
     }

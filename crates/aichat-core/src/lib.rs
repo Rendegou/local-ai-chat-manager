@@ -21,6 +21,7 @@ pub mod adapters;
 pub mod archive;
 pub mod error;
 pub mod imports;
+pub mod localized;
 pub mod model;
 pub mod parser;
 pub mod paths;
@@ -33,6 +34,7 @@ use std::path::{Path, PathBuf};
 use std::sync::RwLock;
 
 pub use error::{Error, ErrorKind, Result};
+pub use localized::{LocalizedText, NoteSeverity, SourceNote};
 pub use settings::{AppSettings, Compression, MachineIdentity, Theme};
 
 /// 应用名（写入仓库 meta 文件）。
@@ -175,7 +177,8 @@ impl Library {
                     found: detection.found,
                     session_hint: detection.session_hint,
                     manual: detection.manual,
-                    notes: Some(detection.notes.join("；")),
+                    notes: localized::join_notes(&detection.notes),
+                    notes_text: detection.notes.clone(),
                     detected_at: Some(chrono::Utc::now().to_rfc3339()),
                 };
                 self.db.upsert_source(&row)?;
@@ -301,7 +304,9 @@ impl Library {
         })?;
         for def in adapters::registry::catalog() {
             if !rows.iter().any(|r| r.id == def.id) {
-                rows.push(storage::types::SourceRow { id: def.id.into(), display_name: def.display_name.into(), root_path: None, found: false, session_hint: 0, manual: false, notes: Some(def.description.into()), detected_at: None });
+                // notes 留空：未发现来源的说明由前端按 id 查字典（可翻译），
+                // 不再把 catalog 的中文描述当成「探测结果」塞进 notes
+                rows.push(storage::types::SourceRow { id: def.id.into(), display_name: def.display_name.into(), root_path: None, found: false, session_hint: 0, manual: false, notes: None, notes_text: Vec::new(), detected_at: None });
             }
         }
         // 用户自定义来源不在静态 catalog 里，且刚配置好时 sources 表还没有它的行
@@ -316,6 +321,7 @@ impl Library {
                 session_hint: 0,
                 manual: true,
                 notes: Some("用户自定义来源".to_string()),
+                notes_text: Vec::new(),
                 detected_at: None,
             });
         }
@@ -328,7 +334,7 @@ impl Library {
         }
         for (id,count) in counts {
             if let Some(row) = rows.iter_mut().find(|r| r.id == id) { row.session_hint = count; }
-            else { rows.push(storage::types::SourceRow { display_name: id.clone(), id, root_path: None, found: true, session_hint: count, manual: true, notes: Some("导入或同步历史".into()), detected_at: None }); }
+            else { rows.push(storage::types::SourceRow { display_name: id.clone(), id, root_path: None, found: true, session_hint: count, manual: true, notes: Some("导入或同步历史".into()), notes_text: Vec::new(), detected_at: None }); }
         }
         Ok(rows)
     }
@@ -359,8 +365,9 @@ impl Library {
             let row = rows.iter().find(|r| r.id == def.id);
             let partial: bool = self.db.with_conn(|c| Ok(c.query_row("SELECT EXISTS(SELECT 1 FROM sessions WHERE source=?1 AND partial=1)",[def.id],|r| r.get(0))?))?;
             let notes = row.and_then(|r| r.notes.clone());
-            let status = if notes.as_deref().map(|s| s.contains("失败")).unwrap_or(false) { "error" }
-                else if partial || notes.as_deref().map(|s| s.contains("仅发现索引")).unwrap_or(false) { "partial" }
+            // 部分解析由 sessions 表直接决定，不依赖任何文案
+            let parsed_partial = partial;
+            let status = if parsed_partial { "partial" }
                 else if row.map(|r| r.found).unwrap_or(false) || (def.access == "import" && row.map(|r| r.session_hint > 0).unwrap_or(false)) { "available" }
                 else { "missing" };
             // 一个原本判为 pending 的工具被用户用字段映射接上之后，就不该再显示「待适配」。
@@ -369,7 +376,13 @@ impl Library {
             if settings.sources.get(def.id).map(|c| c.mapping.is_some()).unwrap_or(false) {
                 definition.access = "native";
             }
-            Ok(adapters::registry::SourceCatalogEntry { definition, status: status.into(), enabled: settings.source_enabled(def.id), notes })
+            Ok(adapters::registry::SourceCatalogEntry {
+                description_code: format!("source.{}.description", def.id),
+                definition,
+                status: status.into(),
+                enabled: settings.source_enabled(def.id),
+                notes,
+            })
         }).collect()
     }
 
@@ -504,7 +517,7 @@ impl Library {
     }
 
     /// git 日志。
-    pub fn git_log(&self, limit: usize) -> Result<String> {
+    pub fn git_log(&self, limit: usize) -> Result<Vec<sync::git::GitCommit>> {
         let settings = self.settings();
         let adapters = self.adapters();
         sync::git_log(&self.sync_context(&settings, &adapters), limit)

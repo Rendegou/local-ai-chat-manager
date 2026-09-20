@@ -372,7 +372,10 @@ fn 目录不存在时探测结果如实报告未发现() {
     assert!(!detections[0].found);
     assert!(detections[0].root.is_none());
     assert!(
-        detections[0].notes.join("").contains("目录不存在"),
+        detections[0]
+            .notes
+            .iter()
+            .any(|n| n.text.code == "source.note.dirMissing"),
         "要说清为什么没发现，实际：{:?}",
         detections[0].notes
     );
@@ -391,7 +394,10 @@ fn 目录里没有匹配文件时探测给出可行动的原因() {
     assert!(!detections[0].found);
     assert_eq!(detections[0].session_hint, 0);
     assert!(
-        detections[0].notes.join("").contains("jsonl"),
+        detections[0]
+            .notes
+            .iter()
+            .any(|n| n.text.text().contains("jsonl")),
         "提示里要写清在找什么扩展名，实际：{:?}",
         detections[0].notes
     );

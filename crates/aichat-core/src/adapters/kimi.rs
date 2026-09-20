@@ -32,6 +32,7 @@ use crate::adapters::{
     cap_metadata, cap_text, message_id, usable_root, AdapterContext, ConversationAdapter,
     DupFilter, MessageSink,
 };
+use crate::localized::{LocalizedText, SourceNote};
 use crate::error::Result;
 use crate::model::{
     DetectionResult, MessageKind, NormalizedMessage, ParsedSessionInfo, RawFileRef, Role,
@@ -173,21 +174,24 @@ impl ConversationAdapter for KimiAdapter {
                     .map(|m| paths::same_path(m, &root))
                     .unwrap_or(false);
                 if is_manual {
-                    notes.push("使用设置中手工指定的目录".to_string());
+                    notes.push(SourceNote::info(LocalizedText::new("source.note.manualDir", "使用设置中手工指定的目录")));
                 } else if std::env::var_os("KIMI_CODE_HOME").is_some() {
-                    notes.push("来自环境变量 KIMI_CODE_HOME".to_string());
+                    notes.push(SourceNote::info(LocalizedText::with(
+                        "source.note.envVar", "name", "KIMI_CODE_HOME", "来自环境变量 KIMI_CODE_HOME",
+                    )));
                 } else {
-                    notes.push("默认目录 ~/.kimi-code".to_string());
+                    notes.push(SourceNote::info(LocalizedText::with(
+                        "source.note.defaultDir", "path", "~/.kimi-code", "默认目录 ~/.kimi-code",
+                    )));
                 }
                 if !root.join(SESSION_INDEX).is_file() {
-                    notes.push("未找到 session_index.jsonl，将通过目录遍历发现会话".to_string());
+                    notes.push(SourceNote::info(LocalizedText::new("source.note.noSessionIndex", "未找到 session_index.jsonl，将通过目录遍历发现会话")));
                 }
                 let hint = Self::count_sessions(&root);
                 if is_manual && hint == 0 {
-                    notes.push(
-                        "该目录下未发现会话（sessions/<工作目录>/<会话>/agents/main/wire.jsonl）"
-                            .to_string(),
-                    );
+                    notes.push(SourceNote::warn(LocalizedText::new(
+                        "source.note.noSessionsInDir", "该目录下未发现会话（sessions/<工作目录>/<会话>/agents/main/wire.jsonl）",
+                    )));
                 }
                 vec![DetectionResult {
                     source: SourceKind::Kimi,
@@ -200,7 +204,9 @@ impl ConversationAdapter for KimiAdapter {
             }
             None => vec![DetectionResult::missing(
                 SourceKind::Kimi,
-                "未找到 Kimi Code 数据目录（可用 KIMI_CODE_HOME 或设置项指定）",
+                SourceNote::error(LocalizedText::new(
+                    "source.kimi.missingDir", "未找到 Kimi Code 数据目录（可用 KIMI_CODE_HOME 或设置项指定）",
+                )),
             )],
         }
     }

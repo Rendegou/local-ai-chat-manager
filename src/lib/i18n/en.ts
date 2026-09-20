@@ -4,6 +4,46 @@ import type { zh } from './zh'
  * English dictionary: must contain exactly the same keys as zh (enforced by `typeof zh`).
  */
 export const en: typeof zh = {
+  /**
+   * 后端发来的可翻译文案（code 来自 Rust 的 LocalizedText）。
+   * 命名看清来源：source.* 是数据源探测，error.* 是错误。
+   */
+  backend: {
+    'source.note.manualDir': 'Using the folder set in Settings',
+    'source.note.envVar': 'From the {name} environment variable',
+    'source.note.autoDetected': 'Auto-detected folder {path}',
+    'source.note.defaultDir': 'Default folder {path}',
+    'source.note.readFailed': 'Read failed — check the folder and its permissions',
+    'source.note.dirMissing': 'Folder missing or unreadable: {path}',
+    'source.note.noMatchingFiles': 'No files matching {extensions} in that folder',
+    'source.note.importedCopy': 'App-managed import copy',
+    'source.note.repoMachines': 'Sync repo: {sessions} sessions from {machines} machines',
+    'source.codex.missingDir': 'Codex data folder not found (set CODEX_HOME or pick one in Settings)',
+    'source.kimi.missingDir': 'Kimi Code data folder not found (set KIMI_CODE_HOME or pick one in Settings)',
+    'source.cursor.missingDir': 'Cursor data folder not found (%APPDATA%/Cursor/User/globalStorage — you can pick one in Settings)',
+    'source.zcode.missingDir': 'ZCode session folder not found (~/.zcode/v2/sessions — you can pick one in Settings)',
+    'source.note.noRollout': 'No rollout-*.jsonl found (you can pick the Codex data folder in Settings)',
+    'source.note.noSessionIndex': 'session_index.jsonl not found — sessions will be discovered by walking the folder',
+    'source.note.noSessionsInDir': 'No sessions in that folder (sessions/<workdir>/<session>/agents/main/wire.jsonl)',
+    'source.note.notCursorDb': 'state.vscdb has no composerHeaders table — this may not be Cursor data',
+    'source.note.dbOpenFailed': 'Could not open state.vscdb read-only (the file may be locked or damaged)',
+    'source.note.noSessionFiles': 'No <folder>/<taskId>.json session files found',
+    'source.note.workbuddyFormat': 'Verified against the Windows WorkBuddyExtension history format; other versions are untested',
+    'source.note.workbuddyIndexFailed': 'Could not read the session summary database (locked or damaged)',
+    'source.note.workbuddyScanFailed': 'Could not read the content folder',
+    'source.note.workbuddyIndexOnly': 'Only the index was found; message bodies are not adapted yet',
+    'source.codex.description': 'Codex data folder — leave empty to auto-detect',
+    'source.kimi.description': 'Kimi Code data folder — leave empty to auto-detect',
+    'source.cursor.description': 'globalStorage folder (state.vscdb)',
+    'source.zcode.description': 'ZCode v2/sessions folder',
+    'source.claude.description': '~/.claude/projects history folder',
+    'source.gemini.description': '~/.gemini/tmp history folder',
+    'source.workbuddy.description': 'WorkBuddy app data folder; how much body text is available depends on what detection finds',
+    'source.doubao-work.description': 'Manual import of the standard package only; automatic collection is not adapted yet',
+    'source.cline.description': 'Not adapted yet. Usual location: saoudrizwan.claude-dev/tasks in VS Code globalStorage (not verified on this machine)',
+    'source.continue.description': 'Not adapted yet. Usual location: ~/.continue/sessions (not verified on this machine)',
+    'source.aider.description': 'Not adapted yet. Usual location: .aider.chat.history.md inside a project folder (not verified on this machine)',
+  },
   common: {
     close: 'Close',
     closeTitle: 'Close {title}',
@@ -231,6 +271,7 @@ export const en: typeof zh = {
     stepFailed: 'Failed',
     snapshotSummary: 'Wrote {n} session folders, {bytes} total',
     snapshotTotal: '… {n} session folders total',
+    commitUnpushed: 'Not pushed',
     advancedTitle: 'Archives & advanced diagnostics',
     advancedDesc: 'Archive old chats, view uncommitted files, Git log, and sources',
     collapse: 'Collapse',

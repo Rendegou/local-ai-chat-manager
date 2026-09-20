@@ -36,6 +36,7 @@ use crate::adapters::{
     cap_metadata, cap_text, message_id, usable_root, AdapterContext, ConversationAdapter,
     DupFilter, MessageSink,
 };
+use crate::localized::{LocalizedText, SourceNote};
 use crate::error::{Error, Result};
 use crate::model::{
     DetectionResult, MessageKind, NormalizedMessage, ParsedSessionInfo, Role, SessionDescriptor,
@@ -130,12 +131,14 @@ impl ConversationAdapter for CursorAdapter {
                     .unwrap_or(false);
                 let mut notes = Vec::new();
                 if is_manual {
-                    notes.push("使用设置中手工指定的目录".to_string());
+                    notes.push(SourceNote::info(LocalizedText::new("source.note.manualDir", "使用设置中手工指定的目录")));
                 } else {
-                    notes.push(format!(
-                        "自动探测目录 {}",
-                        crate::error::display_path(&root)
-                    ));
+                    notes.push(SourceNote::info(LocalizedText::with(
+                        "source.note.autoDetected",
+                        "path",
+                        crate::error::display_path(&root),
+                        format!("自动探测目录 {}", crate::error::display_path(&root)),
+                    )));
                 }
                 // 探测阶段只验证「能只读打开且是 Cursor 的库」，并数出会话数
                 let db_path = root.join(DB_FILE);
@@ -145,7 +148,7 @@ impl ConversationAdapter for CursorAdapter {
                     Ok(conn) => {
                         if !Self::has_composer_table(&conn) {
                             found = false;
-                            notes.push("state.vscdb 中没有 composerHeaders 表，可能不是 Cursor 数据".to_string());
+                            notes.push(SourceNote::error(LocalizedText::new("source.note.notCursorDb", "state.vscdb 中没有 composerHeaders 表，可能不是 Cursor 数据")));
                         } else {
                             hint = conn
                                 .query_row(
@@ -159,7 +162,7 @@ impl ConversationAdapter for CursorAdapter {
                     }
                     Err(_) => {
                         found = false;
-                        notes.push("state.vscdb 只读打开失败（文件可能被占用或已损坏）".to_string());
+                        notes.push(SourceNote::error(LocalizedText::new("source.note.dbOpenFailed", "state.vscdb 只读打开失败（文件可能被占用或已损坏）")));
                     }
                 }
                 vec![DetectionResult {
@@ -173,7 +176,9 @@ impl ConversationAdapter for CursorAdapter {
             }
             None => vec![DetectionResult::missing(
                 SourceKind::Cursor,
-                "未找到 Cursor 数据目录（%APPDATA%/Cursor/User/globalStorage，可在设置中指定）",
+                SourceNote::error(LocalizedText::new(
+                    "source.cursor.missingDir", "未找到 Cursor 数据目录（%APPDATA%/Cursor/User/globalStorage，可在设置中指定）",
+                )),
             )],
         }
     }

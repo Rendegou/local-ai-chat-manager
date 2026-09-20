@@ -331,7 +331,7 @@ export function SourceManagerDrawer({
                           </span>
                         )
                       }
-                      title={view.description}
+                      title={t.text(view.description)}
                       onClick={() => {
                         if (view.access === 'pending') return
                         if (view.access === 'import') {
@@ -343,7 +343,9 @@ export function SourceManagerDrawer({
                       }}
                       className={view.access === 'pending' ? 'opacity-60' : ''}
                     />
-                    <p className="px-2.5 text-meta leading-5 text-ink-muted">{view.description}</p>
+                    <p className="px-2.5 text-meta leading-5 text-ink-muted">
+                      {t.text(view.description)}
+                    </p>
                     {/* 还没适配 ≠ 永远不能用：把「我们还没做」直接接上「那我自己接」 */}
                     {view.access === 'pending' ? (
                       <div className="px-2.5 pb-2 pt-1">
@@ -715,7 +717,7 @@ export function SourceManagerDrawer({
                 </div>
               </>
             ) : (
-              <p className="text-meta text-ink-muted">{current.description}</p>
+              <p className="text-meta text-ink-muted">{t.text(current.description)}</p>
             )}
             <div className="border-t border-line-subtle pt-3">
               <Button tone="ghost" onClick={() => setMode('add')}>

@@ -103,7 +103,8 @@ pub fn scan(
                     found: detection.found,
                     session_hint: detection.session_hint,
                     manual: detection.manual,
-                    notes: Some(detection.notes.join("；")),
+                    notes: crate::localized::join_notes(&detection.notes),
+                    notes_text: detection.notes.clone(),
                     detected_at: Some(chrono::Utc::now().to_rfc3339()),
                 })?;
             }

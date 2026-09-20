@@ -151,7 +151,12 @@ impl Database {
                     row.found as i64,
                     row.session_hint as i64,
                     row.manual as i64,
-                    row.notes,
+                    // 有结构化说明就存 JSON（界面可翻译）；没有就原样存字符串
+                    if row.notes_text.is_empty() {
+                        row.notes.clone()
+                    } else {
+                        Some(serde_json::to_string(&row.notes_text).unwrap_or_default())
+                    },
                     row.detected_at
                 ],
             )?;
@@ -175,11 +180,31 @@ impl Database {
                         found: r.get::<_, i64>(3)? != 0,
                         session_hint: r.get::<_, i64>(4)? as usize,
                         manual: r.get::<_, i64>(5)? != 0,
-                        notes: r.get(6)?,
+                        notes: None,
+                        notes_text: Vec::new(),
                         detected_at: r.get(7)?,
                     })
                 })?
                 .collect::<std::result::Result<Vec<_>, _>>()?;
+            // 列里可能是结构化 JSON，也可能是旧版的中文纯文本。
+            // 注意：解析必须在 with_conn 之外做 —— with_conn 会取连接锁，
+            // 在它里面再调一次就是自己等自己（第一次实现就这么死锁了）。
+            let mut rows = rows;
+            for row in rows.iter_mut() {
+                let raw = row.notes.take();
+                match raw
+                    .as_deref()
+                    .map(serde_json::from_str::<Vec<crate::localized::SourceNote>>)
+                {
+                    Some(Ok(notes)) => {
+                        row.notes = crate::localized::join_notes(&notes);
+                        row.notes_text = notes;
+                    }
+                    _ => {
+                        row.notes = raw.filter(|s| !s.trim().is_empty());
+                    }
+                }
+            }
             Ok(rows)
         })
     }

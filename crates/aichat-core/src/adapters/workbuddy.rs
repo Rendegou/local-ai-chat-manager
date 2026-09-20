@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use serde_json::{json, Value};
 use super::{AdapterContext, ConversationAdapter, MessageSink, cap_raw};
 use super::native::{descriptor, emit, files, read_json, string};
+use crate::localized::{LocalizedText, SourceNote};
 use crate::{Error, Result, paths};
 use crate::model::*;
 
@@ -44,10 +45,14 @@ impl ConversationAdapter for WorkbuddyAdapter {
     fn id(&self) -> &str { "workbuddy" }
     fn detect(&self, ctx: &AdapterContext<'_>) -> Vec<DetectionResult> {
         let root = Self::root(ctx);
-        let mut notes = vec!["已验证 Windows WorkBuddyExtension 历史格式；其他版本需验证".into()];
-        let index_count = Self::index_count(ctx).unwrap_or_else(|_| { notes.push("会话摘要库读取失败（占用或损坏）".into()); 0 });
-        let count = match self.scan(ctx) { Ok(v) => v.len(), Err(_) => { notes.push("正文目录读取失败".into()); 0 } };
-        if count == 0 && index_count > 0 { notes.push("仅发现索引，正文未适配".into()); }
+        let mut notes = vec![SourceNote::info(LocalizedText::new(
+            "source.note.workbuddyFormat", "已验证 Windows WorkBuddyExtension 历史格式；其他版本需验证",
+        ))];
+        let index_count = Self::index_count(ctx).unwrap_or_else(|_| { notes.push(SourceNote::error(LocalizedText::new("source.note.workbuddyIndexFailed", "会话摘要库读取失败（占用或损坏）"))); 0 });
+        let count = match self.scan(ctx) { Ok(v) => v.len(), Err(_) => { notes.push(SourceNote::error(LocalizedText::new("source.note.workbuddyScanFailed", "正文目录读取失败"))); 0 } };
+        if count == 0 && index_count > 0 {
+            notes.push(SourceNote::warn(LocalizedText::new("source.note.workbuddyIndexOnly", "仅发现索引，正文未适配")));
+        }
         vec![DetectionResult { source: SourceKind::Workbuddy, found: count > 0, root: root.is_dir().then_some(root), session_hint: count, notes, manual: ctx.settings.source_root("workbuddy").is_some() }]
     }
     fn scan(&self, ctx: &AdapterContext<'_>) -> Result<Vec<SessionDescriptor>> {

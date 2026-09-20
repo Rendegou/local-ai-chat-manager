@@ -20,6 +20,8 @@ import { formatBytes, formatDateTime, formatDuration, formatRelative } from '../
 import { useT } from '../../lib/i18n'
 import { useSync } from '../../stores/sync'
 import { useLibrary } from '../../stores/library'
+import { useSourceViews } from '../../lib/sources'
+import type { GitCommit } from '../../types/ipc'
 import {
   Button,
   EmptyState,
@@ -55,9 +57,13 @@ export function SyncPage() {
     restore,
     clearError,
   } = useSync()
-  const { sources, loadSessions, setPage } = useLibrary()
+  const { loadSessions, setPage } = useLibrary()
+  // 用 SourceView 而不是裸的 SourceRow：它带上了 catalog 的可翻译描述，
+  // 而未发现来源的说明就不再需要后端把中文塞进 notes
+  const sourceViews = useSourceViews()
   const [remoteInput, setRemoteInput] = useState('')
-  const [log, setLog] = useState<string | null>(null)
+  const [log, setLog] = useState<GitCommit[] | null>(null)
+  const [logBusy, setLogBusy] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
 
   useEffect(() => {
@@ -474,39 +480,84 @@ export function SyncPage() {
                         <Button
                           tone="ghost"
                           size="sm"
-                          onClick={() => void ipc.gitLog(30).then(setLog)}
+                          loading={logBusy}
                           disabled={!status?.isRepo}
+                          onClick={() => {
+                            setLogBusy(true)
+                            void ipc
+                              .gitLog(30)
+                              .then(setLog)
+                              .finally(() => setLogBusy(false))
+                          }}
                         >
                           {t('sync.readLog')}
                         </Button>
                       </div>
-                      {log !== null ? (
-                        <pre className="max-h-48 overflow-y-auto overscroll-contain text-tech leading-5 text-ink-muted whitespace-pre-wrap [overflow-wrap:anywhere]">
-                          {log || t('sync.emptyRepo')}
-                        </pre>
-                      ) : (
+                      {log === null ? (
                         <div className="text-meta text-ink-muted">{t('sync.clickToRead')}</div>
+                      ) : log.length === 0 ? (
+                        <div className="text-meta text-ink-muted">{t('sync.emptyRepo')}</div>
+                      ) : (
+                        <div className="max-h-72 overflow-y-auto overscroll-contain">
+                          {log.map((commit) => (
+                            <div
+                              key={commit.hash}
+                              className="flex items-baseline gap-2 border-b border-line-subtle py-1.5 last:border-b-0"
+                            >
+                              <span className="shrink-0 font-mono text-tech text-ink-faint">
+                                {commit.shortHash}
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span
+                                  className="block truncate text-ui text-ink"
+                                  title={commit.subject}
+                                >
+                                  {commit.subject}
+                                </span>
+                                <span className="flex flex-wrap items-center gap-x-2 text-tech text-ink-muted">
+                                  <span>{commit.author}</span>
+                                  <span className="tabular-nums">{formatDateTime(commit.date)}</span>
+                                  {commit.refs ? <span className="text-accent">{commit.refs}</span> : null}
+                                </span>
+                              </span>
+                              {/* 「哪几条是本地独有的」是同步页最该回答的问题之一 */}
+                              {commit.unpushed ? (
+                                <StatusPill size="sm" tone="warning">
+                                  {t('sync.commitUnpushed')}
+                                </StatusPill>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
 
                     <div>
                       <div className="pb-1 text-body text-ink">{t('sync.sourcesTitle')}</div>
-                      {sources.length === 0 ? (
+                      {sourceViews.length === 0 ? (
                         <div className="text-meta text-ink-muted">{t('sync.notDetected')}</div>
                       ) : (
-                        sources.map((source) => (
+                        sourceViews.map((view) => (
                           <Field
-                            key={source.id}
-                            label={source.displayName}
+                            key={view.id}
+                            label={view.displayName}
                             mono
-                            hint={source.notes ?? undefined}
+                            hint={
+                              /* 优先显示真实探测结果（可翻译）；没有就退回来源说明。
+                                 说明本身也在字典里，所以英文界面不会露出中文。 */
+                              view.notesText.length > 0 ? (
+                                <span>{view.notesText.map((note) => t.text(note)).join('；')}</span>
+                              ) : (
+                                <span>{t.text(view.description)}</span>
+                              )
+                            }
                           >
                             <span className="flex items-center gap-2">
                               <span className="min-w-0 flex-1 truncate">
-                                {source.rootPath ?? t('sync.notFound')}
+                                {view.rootPath ?? t('sync.notFound')}
                               </span>
-                              <StatusPill tone={source.found ? 'success' : 'warning'}>
-                                {source.found ? t('sync.available') : t('sync.notFound')}
+                              <StatusPill tone={view.found ? 'success' : 'warning'}>
+                                {view.found ? t('sync.available') : t('sync.notFound')}
                               </StatusPill>
                             </span>
                           </Field>

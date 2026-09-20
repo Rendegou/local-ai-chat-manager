@@ -15,7 +15,15 @@ pub struct SourceRow {
     pub found: bool,
     pub session_hint: usize,
     pub manual: bool,
+    /// 人话版本（由 `notes_text` 拼接，或旧数据里的纯文本）。
+    /// 保留它是为了 CLI / 日志 / 旧数据可读，界面展示请用 `notes_text`。
     pub notes: Option<String>,
+    /// 结构化说明：前端按 code 翻译。
+    ///
+    /// 与 `notes` 存在同一列里（JSON 文本）；读出来解析失败就当旧的中文纯文本处理，
+    /// 所以升级不需要数据迁移——下一次扫描会把它覆盖成 JSON。
+    #[serde(default)]
+    pub notes_text: Vec<crate::localized::SourceNote>,
     pub detected_at: Option<String>,
 }
 

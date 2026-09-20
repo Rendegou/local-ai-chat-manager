@@ -410,8 +410,8 @@ pub fn status(ctx: &SyncContext<'_>) -> Result<SyncStatusDto> {
     if let Ok(remotes) = repo.remotes() {
         dto.remote = remotes.first().map(|(_, url)| url.clone());
     }
-    if let Ok(commits) = repo.log_oneline(10) {
-        dto.recent_commits = commits.lines().map(|l| l.to_string()).collect();
+    if let Ok(commits) = repo.log_commits(10) {
+        dto.recent_commits = commits.iter().map(|c| format!("{} {}", c.short_hash, c.subject)).collect();
     }
     // 冲突检测：未合并文件或处于 rebase 中间态
     let conflicts = repo.conflicts().unwrap_or_default();
@@ -429,13 +429,13 @@ pub fn status(ctx: &SyncContext<'_>) -> Result<SyncStatusDto> {
 }
 
 /// 读取 git 日志（`View Git Log`）。
-pub fn git_log(ctx: &SyncContext<'_>, limit: usize) -> Result<String> {
+pub fn git_log(ctx: &SyncContext<'_>, limit: usize) -> Result<Vec<git::GitCommit>> {
     let root = ctx.require_repo()?;
     let repo = ctx.repo(&root);
     if !repo.is_repo() {
-        return Ok(String::new());
+        return Ok(Vec::new());
     }
-    repo.log_oneline(limit.clamp(1, 500))
+    repo.log_commits(limit.clamp(1, 200))
 }
 
 /// 中止 rebase（规格 §14）。

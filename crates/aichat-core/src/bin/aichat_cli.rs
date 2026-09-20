@@ -210,7 +210,13 @@ fn run(args: &[String]) -> aichat_core::Result<()> {
             let library = Library::open(data_dir)?;
             println!(
                 "{}",
-                library.git_log(number_arg(rest, "--limit").unwrap_or(20))?
+                library
+                    .git_log(number_arg(rest, "--limit").unwrap_or(20))?
+                    .iter()
+                    .map(|c| format!("{} {} {} {}", c.short_hash, c.date, c.author, c.subject))
+                    .collect::<Vec<_>>()
+                    .join("
+")
             );
         }
         "abort-rebase" => {

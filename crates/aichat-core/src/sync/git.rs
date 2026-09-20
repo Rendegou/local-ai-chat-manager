@@ -6,10 +6,27 @@
 //! - 完整捕获 stdout / stderr / exit code，失败时给出结构化错误；
 //! - 关闭交互式提示（`GIT_TERMINAL_PROMPT=0`），避免 GUI 里等待输入卡死。
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::error::{Error, Result};
+
+/// 一条提交（同步页的提交日志）。
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitCommit {
+    pub hash: String,
+    pub short_hash: String,
+    pub author: String,
+    /// ISO 8601（作者时间）
+    pub date: String,
+    /// 分支 / tag 装饰，例如 `HEAD -> main, origin/main`
+    pub refs: String,
+    pub subject: String,
+    /// 还没推送到远端（没有 upstream 时全部为 true）
+    pub unpushed: bool,
+}
 
 /// 单次 git 命令结果。
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -385,18 +402,70 @@ impl GitRepo {
     }
 
     /// 最近 N 条提交（单行格式）。
-    pub fn log_oneline(&self, limit: usize) -> Result<String> {
-        let limit = limit.to_string();
-        let out = self.git.run_ok(
+    /// 最近提交（结构化）。
+    ///
+    /// 原来是 `--pretty=format:"%h %ad %s"` 直接回一整段文本：没有作者、没有分支/tag
+    /// 装饰，也看不出**哪些提交还没推上去**——而对一个同步工具来说，「哪几条是本地
+    /// 独有的」恰恰是用户最想知道的一件事。
+    ///
+    /// 字段用 US（0x1f）分隔：提交主题里可能有空格、竖线甚至制表符，
+    /// 用一个几乎不会出现在文本里的控制字符才切得干净。
+    pub fn log_commits(&self, limit: usize) -> Result<Vec<GitCommit>> {
+        let limit_s = limit.clamp(1, 200).to_string();
+        // 空仓库（还没有任何提交）时 git log 会失败——那是正常状态，返回空列表
+        let out = match self.git.run(
             &self.root,
             &[
                 "log",
-                &format!("-{limit}"),
-                "--pretty=format:%h %ad %s",
-                "--date=short",
+                &format!("-{limit_s}"),
+                "--pretty=format:%H\u{1f}%h\u{1f}%an\u{1f}%aI\u{1f}%d\u{1f}%s",
             ],
-        )?;
-        Ok(out.stdout)
+        ) {
+            Ok(out) if out.ok() => out,
+            _ => return Ok(Vec::new()),
+        };
+
+        // 没有 upstream（还没配远端）时，全部提交都算「未推送」而不是报错
+        let upstream = self.git.run(&self.root, &["rev-parse", "--abbrev-ref", "@{upstream}"]);
+        let has_upstream = upstream.map(|o| o.ok()).unwrap_or(false);
+        let unpushed: HashSet<String> = if has_upstream {
+            self.git
+                .run(&self.root, &["rev-list", "@{upstream}..HEAD"])
+                .ok()
+                .filter(GitOutput::ok)
+                .map(|o| o.stdout.lines().map(|l| l.trim().to_string()).collect())
+                .unwrap_or_default()
+        } else {
+            HashSet::new()
+        };
+
+        Ok(out
+            .stdout
+            .lines()
+            .filter_map(|line| {
+                let mut parts = line.split('\u{1f}');
+                let hash = parts.next()?.trim().to_string();
+                if hash.is_empty() {
+                    return None;
+                }
+                Some(GitCommit {
+                    short_hash: parts.next().unwrap_or_default().trim().to_string(),
+                    author: parts.next().unwrap_or_default().trim().to_string(),
+                    date: parts.next().unwrap_or_default().trim().to_string(),
+                    refs: parts
+                        .next()
+                        .unwrap_or_default()
+                        .trim()
+                        .trim_start_matches('(')
+                        .trim_end_matches(')')
+                        .trim()
+                        .to_string(),
+                    subject: parts.next().unwrap_or_default().trim().to_string(),
+                    unpushed: !has_upstream || unpushed.contains(&hash),
+                    hash,
+                })
+            })
+            .collect())
     }
 
     /// 仓库是否没有任何提交。
@@ -461,6 +530,13 @@ mod tests {
         assert!(!repo.commit("sync: test").unwrap(), "无变更时不应重复提交");
         assert_eq!(repo.conflicts().unwrap().len(), 0);
         assert_eq!(repo.repo_state(), RepoState::Clean);
-        assert!(repo.log_oneline(5).unwrap().contains("sync: test"));
+        // 最前面还有一条空提交 "init"，所以这里是两条，最新的在前
+        let commits = repo.log_commits(5).unwrap();
+        assert_eq!(commits.len(), 2, "init + sync: test");
+        assert_eq!(commits[0].subject, "sync: test", "日志要按时间倒序");
+        assert!(!commits[0].author.is_empty(), "作者要带上（旧的 log_oneline 丢了这个信息）");
+        assert!(commits[0].date.starts_with("20"), "作者时间应是 ISO 8601：{}", commits[0].date);
+        // 没有 upstream 时全部算「未推送」，而不是报错
+        assert!(commits[0].unpushed, "没有远端时提交应标记为未推送");
     }
 }

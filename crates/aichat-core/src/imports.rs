@@ -5,6 +5,7 @@ use serde_json::{json, Value};
 use crate::{Error, Result};
 use crate::model::*;
 use crate::adapters::{AdapterContext, ConversationAdapter, MessageSink};
+use crate::localized::{LocalizedText, SourceNote};
 use crate::adapters::native::{descriptor, files, read_json};
 
 pub const MAX_IMPORT_BYTES: usize = 16 * 1024 * 1024;
@@ -346,7 +347,7 @@ impl ConversationAdapter for ImportedAdapter {
     fn detect(&self, ctx: &AdapterContext<'_>) -> Vec<DetectionResult> {
         let mut counts = std::collections::BTreeMap::new();
         for d in self.scan(ctx).unwrap_or_default() { *counts.entry(d.source).or_insert(0) += 1; }
-        counts.into_iter().map(|(source,n)| DetectionResult { source, found: true, root: Some(self.root.clone()), session_hint: n, notes: vec!["应用管理的导入副本".into()], manual: true }).collect()
+        counts.into_iter().map(|(source,n)| DetectionResult { source, found: true, root: Some(self.root.clone()), session_hint: n, notes: vec![SourceNote::info(LocalizedText::new("source.note.importedCopy", "应用管理的导入副本"))], manual: true }).collect()
     }
     fn scan(&self, ctx: &AdapterContext<'_>) -> Result<Vec<SessionDescriptor>> {
         let mut out = Vec::new();

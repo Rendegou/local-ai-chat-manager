@@ -27,6 +27,7 @@ import type {
   SyncStatus,
   FieldMapping,
   GenericPreview,
+  GitCommit,
 } from '../types/ipc'
 
 /** 前端侧错误：保留分类 + 人话信息 + 原始细节。 */
@@ -141,7 +142,7 @@ export const syncNow = (options?: {
 }) => call<SyncReport>('sync_now', { options: options ?? {} })
 
 /** Git 日志。 */
-export const gitLog = (limit = 30) => call<string>('git_log', { limit })
+export const gitLog = (limit = 30) => call<GitCommit[]>('git_log', { limit })
 
 /** 中止 rebase。 */
 export const abortRebase = () => call<void>('abort_rebase')

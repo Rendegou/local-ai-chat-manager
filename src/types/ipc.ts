@@ -23,6 +23,37 @@ export interface CommandError {
   detail: string
 }
 
+/**
+ * 后端提供的可翻译文案（与 Rust `LocalizedText` 对应）。
+ *
+ * 后端只给稳定 code + 参数，翻译表仍然只有前端这一份；
+ * `fallback` 是后端的中文原文，用于日志与前端还不认识的新 code。
+ */
+export interface LocalizedText {
+  code: string
+  params?: Record<string, string>
+  fallback: string
+}
+
+/** 探测说明（与 Rust `SourceNote` 对应）。 */
+export interface SourceNote extends LocalizedText {
+  severity: 'info' | 'warn' | 'error'
+}
+
+/** 一条 Git 提交（同步页的日志）。 */
+export interface GitCommit {
+  hash: string
+  shortHash: string
+  author: string
+  /** ISO 8601 */
+  date: string
+  subject: string
+  /** 分支 / tag 装饰 */
+  refs: string
+  /** 是否还没推送到远端 */
+  unpushed: boolean
+}
+
 /** 数据源探测结果。 */
 export interface SourceRow {
   id: string
@@ -31,7 +62,10 @@ export interface SourceRow {
   found: boolean
   sessionHint: number
   manual: boolean
+  /** 中文纯文本（旧数据 / 日志用）；界面展示优先用 notesText */
   notes: string | null
+  /** 结构化探测说明：按 code 翻译 */
+  notesText?: SourceNote[]
   detectedAt: string | null
 }
 
@@ -338,7 +372,10 @@ export interface SourceDefinition {
   adapterVersion: number
   access: 'native' | 'import' | 'pending'
   platforms: string[]
+  /** 中文原文（回退用）；展示走 `descriptionCode` 查字典 */
   description: string
+  /** 描述文案的翻译 key，形如 `source.codex.description` */
+  descriptionCode: string
   status: 'available' | 'missing' | 'partial' | 'error'
   enabled: boolean
   notes: string | null
