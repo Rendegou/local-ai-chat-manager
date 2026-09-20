@@ -92,7 +92,9 @@ jobs:
 
           DMG=$(find target -path '*/bundle/dmg/*.dmg' -type f | head -n 1)
           [ -n "$DMG" ] || fail "没有找到 dmg 产物（预期在 target/**/bundle/dmg/ 下）"
-          echo "dmg：$DMG（$(du -h "$DMG" | cut -f 1)）"
+          # 变量一律用 ${} 包住：macOS 的 /bin/bash 是 3.2，按字节认变量名，
+          # $DMG（ 这种「变量紧跟全角字符」会被它当成变量名 DMG（ → unbound variable
+          echo "dmg：${DMG}（$(du -h "${DMG}" | cut -f 1)）"
 
           VERSION=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' src-tauri/tauri.conf.json | head -n 1)
           [ -n "$VERSION" ] || fail "读不到 src-tauri/tauri.conf.json 里的 version"
